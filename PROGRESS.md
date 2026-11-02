@@ -1207,3 +1207,392 @@ Live verification (not a gate): 31 checks passed. Last 5 lines:
 Local HEAD smoke with the real Hono Bun static adapter: `HEAD /` returned 200 with the CSP and no cache header; `HEAD /assets/index-DGJFajaI.js` returned 200 with the CSP and `Cache-Control: public, max-age=31536000, immutable`. This is an in-process check, not an HTTP request to the deployed server.
 
 No browser and no real HTTP request to the deployed static server were run. The post-deploy `curl -I` check is in the final response.
+
+## Round 4
+
+Read this table first each iteration. No `git`/`gh`; this file is the ledger.
+
+| Item | Status | Files | Gate results | Evidence |
+|---|---|---|---|---|
+| X1. Revalidate document responses | DONE | `src/lib/security-headers.ts`, `tests/server-app.test.ts`, `tests/security-headers.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 46/46; build 0 | `/`, `/some/deep/route` and all non-asset paths return `Cache-Control: no-cache`; `/assets/*` remains immutable |
+| X2. Email code send limits | DONE | `src/convex/auth/emailOtp.ts`, `tests/email-otp-limit.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 50/50; build 0; Convex pushed 09:00:44 | 5 per address per hour plus 500 per day globally; no gateway POST on denial |
+| X3. Header-first image pixel cap | DONE | `src/lib/image-quality.ts`, `src/pages/workspace/Research.tsx`, `tests/image-pixel-limit.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 53/53; build 0 | 24-byte PNG header claiming 60 MP is refused with no `createImageBitmap` call; Research checks before decode too |
+| X4. UTC date wording | DONE | `src/pages/workspace/Research.tsx`, `src/pages/workspace/Project.tsx`, `src/lib/report.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 53/53; build 0 | Picker, result/status labels, Project fields and report sections 3–4 say “UTC date”; picker/report state the UTC-day match rule |
+| X5. Truncated search results | DONE | `src/lib/catalogue.ts`, `src/convex/imagery.ts`, `src/pages/workspace/Research.tsx`, `tests/imagery-truncation.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 58/58; build 0; Convex pushed 09:08:44 | Provider `next` link or 24 returned features sets `truncated: true`; notice shown; truncated empty response has no empty-state panel |
+| X6. Effective limit table | DONE | `README.md` | tsc 0; lint 0 errors; engine 42/42; Vitest 58/58; build 0 | One table lists every rate limit, fixed search/upload bound, ceiling and env var default; no values changed |
+| X7. Final proof | DONE | `PROGRESS.md` | tsc 0; lint 0 errors; engine 42/42; Vitest 58/58; build 0; Convex pushed 09:12:29 | Live script: 31/31 against `https://acoustic-opossum-370.convex.cloud` |
+
+### Round 4 iteration 0 — ledger created
+
+All seven items start as TODO. Hard rules: do not edit `src/convex/auth.ts`, `src/convex/users.ts`, `vly-toolbar-readonly.tsx`, or `.env*`; no new dependencies; no `git`; one item per iteration.
+
+### Round 4 iteration 1 — X1 document revalidation
+
+Evidence before the change: `securityHeadersForPath` only set `Cache-Control` for paths starting with `/assets/`; every other response, including the SPA fallback, had no cache directive. The production `createApp` served those responses unchanged.
+
+Test-first evidence: the request tests asserted `Cache-Control: no-cache` for `/`, `/some/deep/route` and the document response, and the header test did the same for `/workspace`, `/assets` and `/assets-extra/file.js`. The focused run failed five times with `expected undefined/null to be 'no-cache'`. The test helper was also corrected to call `await next()` so the SPA fallback was genuinely exercised; the cache assertions still failed until the header function changed.
+
+Implementation: non-asset paths now receive `Cache-Control: no-cache`; `/assets/*` keeps `public, max-age=31536000, immutable`. No value was otherwise changed.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  46 passed (46)
+   Start at  08:58:36
+   Duration  2.34s (tests 46%, import 36%, transform 16%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-O1dpEBp4.js         35.03 kB │ gzip:  10.60 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DGJFajaI.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 9.13s
+```
+
+No `src/convex/` file changed, so X1 did not need a Convex push.
+
+### Round 4 iteration 2 — X2 email code send limits
+
+Evidence: `src/convex/auth/emailOtp.ts` sent every requested code straight to the gateway, with no address or global counter. The read-only `src/convex/auth.ts` only registers the provider, so it did not need to change.
+
+Provider investigation: the installed `@convex-dev/auth@0.0.90` runtime calls `sendVerificationRequest` with the Convex action context as a second argument in `dist/server/implementation/signIn.js` (the library marks that argument with `@ts-expect-error` because its public type omits it). `generateVerificationToken` has no context and cannot write to the database. The smallest correct place is therefore `sendVerificationRequest` in the editable `emailOtp.ts`, calling the existing internal `rateLimits.consume` mutation through that runtime context.
+
+Test-first evidence: `tests/email-otp-limit.test.ts` first failed all four cases. The allowed case showed zero `runMutation` calls, and the three denial cases resolved instead of rejecting. After implementation all four pass. The test also asserts that the per-address key does not contain the raw email address and that no gateway POST occurs when either bucket denies.
+
+Implementation: the address bucket allows 5 sends per hour and is keyed by a SHA-256 digest of the normalized address. The global bucket allows 500 sends per day. If the runtime context is ever absent, the provider refuses to send rather than bypassing the limit. Only `emailOtp.ts` changed under `src/convex/`; `auth.ts` and `users.ts` were not edited.
+
+Convex push: `✔ 09:00:44 Convex functions ready! (7.82s)`.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  12 passed (12)
+      Tests  50 passed (50)
+   Start at  09:01:38
+   Duration  2.48s (import 45%, tests 37%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-O1dpEBp4.js         35.03 kB │ gzip:  10.60 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DGJFajaI.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.55s
+```
+
+Live sign-in email delivery was not exercised because that would send a real code. The deny-before-send behaviour is covered by the unit tests.
+
+### Round 4 iteration 3 — X3 header-first image pixel cap
+
+Evidence: `src/convex/upload.ts` already enforced the 50 MP ceiling from the stored file header, but the browser path called `createImageBitmap(file)` in `analyzeImageQuality` before reading any size. A decompression bomb could therefore allocate a large bitmap before the server ever saw the upload. `Research.tsx` called that decode immediately after the signature check.
+
+Test-first evidence: `tests/image-pixel-limit.test.ts` first failed because `checkImagePixelLimit` did not exist. The decode test also showed the current path producing the generic decode error after `createImageBitmap` was called. After implementation all three tests pass: a 24-byte PNG header claiming 10,000 × 6,000 is refused, a 10,000 × 5,000 header is accepted as exactly 50 MP, a bad header is refused, and the decode spy is not called for the oversized image.
+
+Implementation: `checkImagePixelLimit` reads the file bytes and uses the existing `parseImageHeader`; it never invokes a decoder. It returns the plain message “This image is 10000 × 6000 pixels. The limit is 50 megapixels, so it was not opened.” `analyzeImageQuality` calls it before `createImageBitmap`, and the Research upload handler calls it after the signature check and before quality analysis. Both paths stop before decode.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  13 passed (13)
+      Tests  53 passed (53)
+   Start at  09:03:46
+   Duration  2.50s (import 45%, tests 36%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-Dbxhxski.js         35.03 kB │ gzip:  10.60 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-Pfl6Iju4.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.07s
+```
+
+No `src/convex/` file changed, so X3 did not need a Convex push.
+
+### Round 4 iteration 4 — X4 UTC date wording
+
+Evidence: the date picker was labelled “Image capture date”; result labels used “exact date”, “different capture date” and “date range”; Project used “date you asked for” and “image captured”; report headings 3 and 4 did not say UTC. The underlying search already converts the entered date to one UTC day, so the copy did not match the behaviour.
+
+Implementation (copy only): Research now labels the picker “Image capture date (UTC date)”, the summary “UTC capture date”, result matches “exact UTC date match” / “different UTC date”, and date ranges as UTC date ranges. Project labels the requested date and captured date with UTC. Report sections 3 and 4 are “UTC date you asked for” and “When the image was captured (UTC)”, with capture-date lines marked UTC. The picker and report both include the short sentence “The match uses the UTC day of the satellite pass.” No behaviour changed and no test was added for copy alone.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  13 passed (13)
+      Tests  53 passed (53)
+   Start at  09:05:59
+   Duration  2.50s (import 45%, tests 37%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-DjYBaRY9.js         35.11 kB │ gzip:  10.63 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-Dd0ShMDO.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.07s
+```
+
+No `src/convex/` file changed, so X4 did not need a Convex push.
+
+### Round 4 iteration 5 — X5 truncated search results
+
+Evidence: `normalizeSearchResponse` read only `features`; it discarded the FeatureCollection `links`, so a STAC `next` link was invisible. A full page of 24 results was indistinguishable from a complete short page. The action returned no truncation field, and Research used the `empty` status to render “No images for this exact search” even when the provider page was full.
+
+Test-first evidence: `tests/imagery-truncation.test.ts` first failed all five cases: no `truncated` field, the copy helper was missing, and both action responses omitted the field. It now covers a 24-feature page, a provider `next` link, a 23-feature short page, a full page with zero exact-date matches, and both truncation messages.
+
+Implementation: `normalizeSearchResponse` now sets `truncated` when a root `rel: "next"` link exists or the provider returned at least the requested limit (default 24); the action exposes it on both `ok` and `empty` responses and changes the note so a full page is never described as a confirmed empty result. Research shows “Showing the first 24 results. Try a shorter date range.” for a non-empty truncated result and “Copernicus returned the first 24 results. More may exist, so the app cannot say this date has no images. Try a shorter date range.” when no exact-date scene is shown. The empty-state panel is not rendered for a truncated response.
+
+Convex push: `✔ 09:08:44 Convex functions ready! (8.51s)`.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  14 passed (14)
+      Tests  58 passed (58)
+   Start at  09:09:37
+   Duration  2.88s (import 48%, tests 34%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-CFpty7FD.js         35.11 kB │ gzip:  10.63 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DZ6p34Rz.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.66s
+```
+
+### Round 4 iteration 6 — X6 effective limits and environment table
+
+Evidence: the limits were split between code (`src/convex/lib/limits.ts` and the new email send limits), README prose, and integrations.md. `AI_DAILY_CAP`, `AI_ENABLED`, `FRAME_ANCESTORS`, guest/signed-in caps, per-user caps and every environment variable read by the app or live script were not printed together. Every value inspected was finite and positive, so no default or ceiling was wrong or infinite.
+
+Implementation (docs only): README now has one “Limits and environment variables” table with the effective default, any override/ceiling, and what each item protects. It covers per-user AI/geocode/imagery/upload limits, project cooldown, guest and signed-in global caps, email code limits, fixed search/upload bounds, `AI_ENABLED`, `FRAME_ANCESTORS`, and the integration, CDSE, Convex endpoint and live-script variables. It also states that invalid overrides fall back and values above a ceiling are clamped. No runtime value changed.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  14 passed (14)
+      Tests  58 passed (58)
+   Start at  09:11:48
+   Duration  2.82s (import 48%, tests 35%, transform 14%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-CFpty7FD.js         35.11 kB │ gzip:  10.63 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DZ6p34Rz.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.21s
+```
+
+No `src/convex/` file changed, so X6 did not need a Convex push.
+
+### Round 4 iteration 7 — X7 final proof
+
+No source changed in this iteration. Final Convex push: `✔ 09:12:29 Convex functions ready! (8.36s)`. All five gates passed on the final tree, and the live verification script passed 31 checks against `https://acoustic-opossum-370.convex.cloud`.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  120:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  14 passed (14)
+      Tests  58 passed (58)
+   Start at  09:13:21
+   Duration  2.79s (import 47%, tests 35%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-CFpty7FD.js         35.11 kB │ gzip:  10.63 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DZ6p34Rz.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.14s
+```
+
+Live verification (not a gate): 31 checks passed. Last 5 lines:
+
+```text
+✓ all test records deleted
+✓ uploaded image deleted from storage
+✓ linked calculations deleted
+✓ record list is empty after deletion
+
+31 live checks passed against https://acoustic-opossum-370.convex.cloud
+```
+
+The live AI adapter printed `@vly-ai/integrations@0.6.14 (AI SDK generateText)` with no system-message warning. No browser, deployed static-host HTTP check, production Convex deploy or real sign-in email send was performed.

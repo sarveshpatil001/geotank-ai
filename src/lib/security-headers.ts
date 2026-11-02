@@ -82,9 +82,9 @@ export function securityHeadersForPath(
     "Referrer-Policy": "strict-origin-when-cross-origin",
   };
 
-  if (pathname.startsWith("/assets/")) {
-    headers["Cache-Control"] = "public, max-age=31536000, immutable";
-  }
+  headers["Cache-Control"] = pathname.startsWith("/assets/")
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
 
   return headers;
 }

@@ -147,6 +147,44 @@ round-trip and print layout were not visually verified).
 - AI commentary can be wrong and is not benchmarked. It is not evidence.
 - The app is a responsive web app/PWA manifest; offline caching is not implemented.
 
+## Limits and environment variables
+
+All rate limits are finite token buckets. An empty, zero, negative, non-integer or non-finite override falls back to the default; a value above the ceiling is clamped.
+
+| Limit or variable | Effective default | What it protects |
+|---|---|---|
+| AI requests per user | 10 per hour | Stops one account draining AI credits |
+| `AI_DAILY_CAP` | 100 per user per day (ceiling 10,000) | Caps daily AI spend per account |
+| AI project cooldown | 1 run per 60 seconds per record | Stops repeated runs on the same record |
+| Global AI daily, guest | 20 per day (`AI_GUEST_GLOBAL_DAILY_CAP`, ceiling 1,000) | Caps total guest AI spend |
+| Global AI daily, signed in | 200 per day (`AI_SIGNED_IN_GLOBAL_DAILY_CAP`, ceiling 5,000) | Caps total signed-in AI spend |
+| `AI_ENABLED` | On unless set to `false` (case-insensitive, trimmed) | Emergency AI cost and availability kill switch |
+| Geocoding per user | 30 per hour | Protects the OpenStreetMap Nominatim service |
+| `GEOCODE_GLOBAL_PER_SECOND` | 1 per second (ceiling 20) | Keeps the shared geocoder within its public-service budget |
+| Imagery search per user | 30 per hour | Stops one account flooding Copernicus |
+| Imagery health check per user | 10 per hour | Limits repeated upstream connectivity probes |
+| Global imagery search, guest | 100 per day (`IMAGERY_SEARCH_GUEST_GLOBAL_DAILY_CAP`, ceiling 1,000) | Caps anonymous Copernicus traffic |
+| Global imagery search, signed in | 500 per day (`IMAGERY_SEARCH_GLOBAL_DAILY_CAP`, ceiling 5,000) | Caps signed-in Copernicus traffic |
+| Upload registration per user | 20 per day | Stops storage and finalisation abuse |
+| Global uploads, guest | 20 per day (`UPLOAD_GUEST_GLOBAL_DAILY_CAP`, ceiling 500) | Caps anonymous storage use |
+| Global uploads, signed in | 100 per day (`UPLOAD_GLOBAL_DAILY_CAP`, ceiling 1,000) | Caps signed-in storage use |
+| Email sign-in codes per address | 5 per hour | Stops code spam to one inbox |
+| Email sign-in codes globally | 500 per day | Caps total gateway email sends |
+| Sign-in code lifetime | 15 minutes | Limits the window for a stolen code |
+| Catalogue page | 24 results; a full page or provider `next` link is marked truncated | Prevents a partial page looking complete |
+| Search area | 0.6° maximum span | Keeps STAC queries and map work bounded |
+| Nearby-date window | 1–15 days, only when chosen | Prevents silent or unbounded date widening |
+| Upload file size | 12 MiB | Bounds storage and server processing |
+| Upload pixels | 50 megapixels, checked from the header before decode | Prevents decompression-bomb memory use |
+| `FRAME_ANCESTORS` | `'none'` | Blocks clickjacking; accepts space-separated HTTPS origins |
+| `VLY_INTEGRATION_KEY` | Unset | Required for AI and email-code delivery; stays server-side |
+| `VLY_INTEGRATION_BASE_URL` | `https://integrations.vly.ai` | Points AI/email at the integration gateway |
+| `CDSE_STAC_TOKEN` | Unset; anonymous catalogue search | Optional token for a higher Copernicus quota |
+| `VITE_CONVEX_URL` | Required; no built-in fallback | Build-time Convex endpoint; the app cannot connect without it |
+| `CONVEX_SITE_URL` | Required by Convex Auth; no built-in fallback | Auth callback and issuer base |
+| `VLY_CONVEX_AUTH_ISSUER` | `https://freebuff.com` | Trusted auth issuer |
+| `CONVEX_URL` | Required only by `scripts/verify-live.ts` | Target deployment for live verification |
+
 ## Privacy and security
 
 - All queries/mutations/actions check the signed-in user and record ownership.

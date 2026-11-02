@@ -50,7 +50,7 @@ export function buildResearchReport(
           ? "Copernicus image record"
           : "Your uploaded image (source not checked)"
       }`,
-      "Goal: check whether a satellite image exists for the place and date you asked for. Save what Copernicus returned and its limits. Work out full tank capacity from the inside sizes you entered, when you add a calculation.",
+      "Goal: check whether a satellite image exists for the place and UTC date you asked for. Save what Copernicus returned and its limits. Work out full tank capacity from the inside sizes you entered, when you add a calculation.",
       "This report never states an internal liquid level or a liquid inventory.",
     ],
   });
@@ -74,42 +74,42 @@ export function buildResearchReport(
         ]
       : [
           "You gave no place for this upload.",
-          "No area search was run. This record is an uploaded file with a capture date you entered.",
+          "No area search was run. This record is an uploaded file with a UTC date you entered.",
         ],
   });
 
   sections.push({
-    heading: "3. Date you asked for",
+    heading: "3. UTC date you asked for",
     lines: [
-      `Capture date you entered: ${project.requestedDate}`,
+      `UTC date you entered: ${project.requestedDate}`,
       `How it was chosen: ${
         project.dateMatch === "exact"
-          ? "Exact date search"
+          ? "Exact UTC date search"
           : project.dateMatch === "window"
-            ? "Date range you chose (nearby dates allowed)"
-            : "Upload date you entered"
+            ? "UTC date range you chose (nearby dates allowed)"
+            : "Upload UTC date you entered"
       }`,
-      "This is the date the image was taken. It is not the processing date or the upload date.",
+      "This is the UTC date the image was taken. The match uses the UTC day of the satellite pass. It is not the processing date or the upload date.",
     ],
   });
 
   sections.push({
-    heading: "4. When the image was captured",
+    heading: "4. When the image was captured (UTC)",
     lines: scene
       ? [
           `Capture time from Copernicus (UTC): ${scene.acquiredAt}`,
-          `Capture date: ${acquiredDate ?? NOT_AVAILABLE}`,
+          `Capture date (UTC): ${acquiredDate ?? NOT_AVAILABLE}`,
           `Published: ${scene.publishedAt ?? "Not reported"}`,
           `Record updated: ${scene.updatedAt ?? "Not reported"}`,
           `Date match: ${
             project.dateMatch === "exact" && acquiredDate === project.requestedDate
-              ? "The capture date matches your request"
-              : "The capture date is not the date you asked for. This record flags the difference and no image was substituted silently."
+              ? "The UTC capture date matches the UTC date you asked for"
+              : "The UTC capture date is not the UTC date you asked for. This record flags the difference and no image was substituted silently."
           }`,
         ]
       : upload
         ? [
-            `Capture date you entered: ${upload.declaredCaptureDate}`,
+            `UTC date you entered: ${upload.declaredCaptureDate}`,
             `EXIF capture time: ${upload.exifDateOriginal ?? "Not present"}`,
             "An uploaded file has no Copernicus capture time.",
           ]
@@ -177,10 +177,10 @@ export function buildResearchReport(
     heading: "8. How the record was made",
     lines: [
       "1. The place was checked and turned into a capped search box. You either entered coordinates or chose an OpenStreetMap result.",
-      "2. The capture date was checked as a real date that is not in the future. It was turned into one full UTC day.",
+      "2. The UTC capture date was checked as a real date that is not in the future. It was turned into one full UTC day.",
       "3. The app sent a public, read-only search to Copernicus.",
       "4. Only fields returned by Copernicus were saved. Missing fields stay empty.",
-      "5. A date check was applied. Different dates are reported, never swapped in silently.",
+      "5. A UTC date check was applied. Different dates are reported, never swapped in silently.",
       "6. Fixed rules ran and each result kept a note of where its evidence came from.",
       `7. Any tank calculation was run again by the fixed engine (${ENGINE_VERSION}) when saved.`,
       "8. AI, when used, comments on the saved data only. It cannot change a number or a check status.",
@@ -193,9 +193,9 @@ export function buildResearchReport(
       ? [
           project.dateMatch === "window"
             ? acquiredDate === project.requestedDate
-              ? "Copernicus returned image data inside the nearby-date window you chose. The capture date happens to match the date you asked for."
-              : "Copernicus returned image data inside the nearby-date window you chose. The capture date is not the date you asked for. The report flags this and no image was substituted silently."
-            : "Copernicus returned image data for your search box and exact date.",
+              ? "Copernicus returned image data inside the nearby-date window you chose. The UTC capture date happens to match the UTC date you asked for."
+              : "Copernicus returned image data inside the nearby-date window you chose. The UTC capture date is not the UTC date you asked for. The report flags this and no image was substituted silently."
+            : "Copernicus returned image data for your search box and exact UTC date.",
           `Cloud cover from Copernicus: ${formatCloudCover(scene.cloudCoverPct)}.`,
           "The app does not claim a surface feature, tank size or liquid level from this image. This record is saved image data only.",
         ]

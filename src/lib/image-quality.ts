@@ -1,3 +1,5 @@
+import { MAX_UPLOAD_PIXELS, parseImageHeader } from "./image-header";
+
 /**
  * Client-side upload validation and heuristic image statistics.
  *
@@ -88,11 +90,42 @@ export type ImageQualityOutcome =
   | { ok: true; report: ImageQualityReport }
   | { ok: false; message: string };
 
+export type ImagePixelLimitResult =
+  | { ok: true; width: number; height: number }
+  | { ok: false; message: string };
+
 const MAX_SAMPLE_EDGE = 512;
+
+/** Reads only the file header, so an oversized image is never decoded. */
+export async function checkImagePixelLimit(
+  file: Blob,
+): Promise<ImagePixelLimitResult> {
+  const header = parseImageHeader(await file.arrayBuffer());
+  if (!header) {
+    return {
+      ok: false,
+      message:
+        "The image size could not be read from the file header, so it was not opened. The file may be damaged.",
+    };
+  }
+  if (
+    header.error === "PIXEL_LIMIT" ||
+    header.width * header.height > MAX_UPLOAD_PIXELS
+  ) {
+    return {
+      ok: false,
+      message: `This image is ${header.width} × ${header.height} pixels. The limit is ${MAX_UPLOAD_PIXELS / 1_000_000} megapixels, so it was not opened.`,
+    };
+  }
+  return { ok: true, width: header.width, height: header.height };
+}
 
 export async function analyzeImageQuality(
   file: File,
 ): Promise<ImageQualityOutcome> {
+  const pixelLimit = await checkImagePixelLimit(file);
+  if (!pixelLimit.ok) return pixelLimit;
+
   let bitmap: ImageBitmap | null = null;
   try {
     bitmap = await createImageBitmap(file);

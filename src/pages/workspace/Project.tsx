@@ -242,7 +242,7 @@ export default function ProjectPage() {
         : "NOT VERIFIED",
       detail: scene
         ? record.dateMatch === "exact"
-          ? "The Copernicus capture date matches the date you requested."
+          ? "The Copernicus UTC date matches the UTC date you requested."
           : "The date is near your request but not the same. The record flags this."
         : "This is an uploaded file, not a checked satellite product. The date is not proven.",
     },
@@ -318,10 +318,10 @@ export default function ProjectPage() {
               <StatusPill status={overallStatus(checks)} />
               <span className="rounded-full border border-edge/70 bg-abyss/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
                 {record.dateMatch === "exact"
-                  ? "exact capture date"
+                  ? "exact UTC date"
                   : record.dateMatch === "window"
-                    ? "date range"
-                    : "upload · date not checked"}
+                    ? "UTC date range"
+                    : "upload · UTC date not checked"}
               </span>
               <span className="font-mono text-[10px] text-mist/70">
                 created {new Date(record.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC
@@ -351,12 +351,12 @@ export default function ProjectPage() {
 
         <div className="grid gap-3 print-hide sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
-            label="date you asked for"
+            label="UTC date you asked for"
             value={<span className="font-mono text-base">{record.requestedDate}</span>}
             hint="as entered by you"
           />
           <StatTile
-            label="image captured"
+            label="image captured (UTC date)"
             value={
               <span className="font-mono text-base">
                 {acquiredDate ?? "not available"}
@@ -457,7 +457,7 @@ export default function ProjectPage() {
                   caption={
                     scene
                       ? "A Copernicus preview for orientation only. It is not measurement data, and the app does not measure it."
-                      : "The file you uploaded, served from protected storage. Its source, ground scale and capture date are not independently checked."
+                      : "The file you uploaded, served from protected storage. Its source, ground scale and UTC date are not independently checked."
                   }
                   note={
                     scene
@@ -512,7 +512,7 @@ These numbers are for the whole tile, as reported by Copernicus. They
                       breakAll
                     />
                     <Field
-                      label="Captured (UTC)"
+                      label="Captured (UTC date and time)"
                       value={scene.acquiredAt}
                       mono
                     />
@@ -560,8 +560,9 @@ These numbers are for the whole tile, as reported by Copernicus. They
                     )}
                   </dl>
                   <p className="mt-3 rounded-lg border border-edge/60 bg-abyss/50 px-3 py-2 text-[10px] leading-4 text-mist/70">
-                    {scene.attribution}. The capture date comes from Copernicus. It
-                    is not guessed from the processing or upload date.
+                    {scene.attribution}. The capture date comes from Copernicus and
+                    is not guessed from the processing or upload date. The match
+                    uses the UTC day of the satellite pass.
                   </p>
                 </Panel>
               ) : (
@@ -581,7 +582,7 @@ These numbers are for the whole tile, as reported by Copernicus. They
                         }
                       />
                       <Field
-                        label="Entered capture date"
+                        label="Entered UTC date"
                         value={upload.declaredCaptureDate}
                         mono
                       />

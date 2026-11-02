@@ -26,7 +26,7 @@ describe("production security headers", () => {
     );
     expect(headers["X-Content-Type-Options"]).toBe("nosniff");
     expect(headers["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
-    expect(headers["Cache-Control"]).toBeUndefined();
+    expect(headers["Cache-Control"]).toBe("no-cache");
   });
 
   it("uses FRAME_ANCESTORS when every value is a valid origin", () => {
@@ -74,8 +74,10 @@ describe("production security headers", () => {
     expect(securityHeadersForPath("/assets/logo.svg")["Cache-Control"]).toBe(
       "public, max-age=31536000, immutable",
     );
-    expect(securityHeadersForPath("/assets")["Cache-Control"]).toBeUndefined();
-    expect(securityHeadersForPath("/assets-extra/file.js")["Cache-Control"]).toBeUndefined();
-    expect(securityHeadersForPath("/")["Cache-Control"]).toBeUndefined();
+    expect(securityHeadersForPath("/assets")["Cache-Control"]).toBe("no-cache");
+    expect(securityHeadersForPath("/assets-extra/file.js")["Cache-Control"]).toBe(
+      "no-cache",
+    );
+    expect(securityHeadersForPath("/")["Cache-Control"]).toBe("no-cache");
   });
 });

@@ -14,7 +14,13 @@ const expectedCsp = [
   "object-src 'none'",
 ].join("; ");
 
-const serveStatic = () => async () => new Response("static");
+const serveStatic =
+  (options: { root?: string; path?: string }) =>
+  async (_context: unknown, next: () => Promise<void>) => {
+    if (options.root === "./dist/assets") return new Response("asset");
+    if (options.path === "./dist/index.html") return new Response("spa");
+    await next();
+  };
 
 describe("production Hono app", () => {
   it("sets exact headers on the SPA root response", async () => {
@@ -27,7 +33,16 @@ describe("production Hono app", () => {
     expect(response.headers.get("Referrer-Policy")).toBe(
       "strict-origin-when-cross-origin",
     );
-    expect(response.headers.get("Cache-Control")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toBe("no-cache");
+  });
+
+  it("requires revalidation for the SPA fallback at any depth", async () => {
+    const app = createApp({ serveStatic });
+    const deep = await app.request("/some/deep/route");
+
+    expect(deep.status).toBe(200);
+    expect(deep.headers.get("Content-Security-Policy")).toBe(expectedCsp);
+    expect(deep.headers.get("Cache-Control")).toBe("no-cache");
   });
 
   it("sets immutable caching on asset responses only", async () => {
@@ -39,6 +54,6 @@ describe("production Hono app", () => {
     expect(asset.headers.get("Cache-Control")).toBe(
       "public, max-age=31536000, immutable",
     );
-    expect(root.headers.get("Cache-Control")).toBeNull();
+    expect(root.headers.get("Cache-Control")).toBe("no-cache");
   });
 });

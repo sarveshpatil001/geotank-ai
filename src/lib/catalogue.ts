@@ -613,7 +613,16 @@ export type NormalizedSearch = {
   differentDateFeatures: number;
   filteredByCloud: number;
   malformedFeatures: number;
+  truncated: boolean;
 };
+
+function hasProviderNextLink(payload: unknown): boolean {
+  const root = asRecord(payload);
+  if (!root || !Array.isArray(root.links)) return false;
+  return root.links
+    .slice(0, 40)
+    .some((link) => asRecord(link)?.rel === "next");
+}
 
 /**
  * Normalise a STAC FeatureCollection and, for exact-date searches, drop any
@@ -628,10 +637,12 @@ export function normalizeSearchResponse(
     collectionId: string;
     mode: "exact" | "window";
     maxCloudPct?: number;
+    limit?: number;
   },
 ): NormalizedSearch {
   const root = asRecord(payload);
   const features = Array.isArray(root?.features) ? root.features : [];
+  const limit = Math.min(Math.max(options.limit ?? SEARCH_LIMIT, 1), 100);
   const scenes: CatalogueScene[] = [];
   let malformedFeatures = 0;
   let differentDateFeatures = 0;
@@ -677,6 +688,7 @@ export function normalizeSearchResponse(
     differentDateFeatures,
     filteredByCloud,
     malformedFeatures,
+    truncated: hasProviderNextLink(payload) || features.length >= limit,
   };
 }
 
@@ -804,6 +816,17 @@ export function formatCloudCover(value: number | null): string {
 export function formatResolution(value: number | null): string {
   if (value === null) return "Not reported";
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value)} m / pixel`;
+}
+
+export function formatTruncationNotice(
+  returnedFeatures: number,
+  hasScenes: boolean,
+): string {
+  const count = Math.max(0, Math.trunc(returnedFeatures));
+  const results = `${count} result${count === 1 ? "" : "s"}`;
+  return hasScenes
+    ? `Showing the first ${results}. Try a shorter date range.`
+    : `Copernicus returned the first ${results}. More may exist, so the app cannot say this date has no images. Try a shorter date range.`;
 }
 
 export function formatCoordinate(lat: number, lon: number): string {

@@ -16,12 +16,14 @@ import {
   formatCloudCover,
   formatCoordinate,
   formatResolution,
+  formatTruncationNotice,
   platformLabel,
   validateCaptureDate,
 } from "@/lib/catalogue";
 import { extractExif } from "@/lib/exif";
 import {
   analyzeImageQuality,
+  checkImagePixelLimit,
   checkImageSignature,
   formatBytes,
   sha256Hex,
@@ -210,7 +212,7 @@ export default function ResearchPage() {
       (result.query.maxCloudPct ?? null) === (parsedCloud ?? null);
     if (!areaMatches || !dateMatches || !cloudMatches) {
       setCreateError(
-        "The place, capture date or filter changed after this search. Search again so the saved record matches the request.",
+        "The place, UTC date or filter changed after this search. Search again so the saved record matches the request.",
       );
       return;
     }
@@ -260,13 +262,20 @@ export default function ResearchPage() {
       );
       return;
     }
-    setUploadStage("Checking the file type and opening the image…");
+    setUploadStage("Checking the file type…");
     const signature = await checkImageSignature(file, file.type);
     if (!signature.matchesDeclared || !signature.detected) {
       setUploadStage(null);
       setUploadError(
         "The file does not match a supported image type. It was not uploaded.",
       );
+      return;
+    }
+    setUploadStage("Reading the image size from the file header…");
+    const pixelLimit = await checkImagePixelLimit(file);
+    if (!pixelLimit.ok) {
+      setUploadStage(null);
+      setUploadError(pixelLimit.message);
       return;
     }
     const quality = await analyzeImageQuality(file);
@@ -297,7 +306,7 @@ export default function ResearchPage() {
     const dateResult = validateCaptureDate(date);
     if (!dateResult.ok) {
       setUploadError(
-        `${dateResult.message} An upload needs a capture date.`,
+        `${dateResult.message} An upload needs a UTC date.`,
       );
       return;
     }
@@ -353,6 +362,12 @@ export default function ResearchPage() {
     searchResult && (searchResult.status === "invalid" || searchResult.status === "error")
       ? searchResult
       : null;
+  const truncationNotice = successfulSearch?.truncated
+    ? formatTruncationNotice(
+        successfulSearch.counts.returnedFeatures,
+        successfulSearch.scenes.length > 0,
+      )
+    : null;
 
   return (
     <div className="space-y-8">
@@ -503,7 +518,7 @@ The place was larger than the allowed search area, so the box was
 
           <div className="border-t border-edge/60 pt-5">
             <Label htmlFor="capture-date" className="mb-2 text-xs text-mist">
-              Image capture date <span className="text-emerald">required</span>
+              Image capture date (UTC date) <span className="text-emerald">required</span>
             </Label>
             <div className="relative">
               <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-mist" />
@@ -522,9 +537,10 @@ The place was larger than the allowed search area, so the box was
               />
             </div>
             <p className="mt-2 text-[11px] leading-5 text-mist/80">
-This is the day the image was taken, not the day it was processed or
-              uploaded. Future dates are rejected. If no image exists on that
-              date, the app says so instead of swapping in another date.
+This is the UTC date the image was taken, not the day it was processed or
+              uploaded. The match uses the UTC day of the satellite pass. Future
+              dates are rejected. If no image exists on that date, the app says so
+              instead of swapping in another date.
             </p>
 
             <button
@@ -619,7 +635,7 @@ Upload image (optional)
               </div>
               <div>
                 <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-capture date
+UTC capture date
                 </dt>
                 <dd className="mt-1 font-mono text-sm text-ink">
                   {date || "Not set"}
@@ -684,7 +700,7 @@ Copernicus API docs
           <SectionHeading
             eyebrow="Optional upload · step 3"
             title="Uploaded images are not checked satellite products"
-            description="The browser has read the file. Its source, ground scale and capture date are not proven until you review the checks."
+            description="The browser has read the file. Its source, ground scale and UTC date are not proven until you review the checks."
           />
           <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
             <img
@@ -770,7 +786,7 @@ Store and check upload
               </div>
               {!date && (
                 <p className="text-[11px] text-warn">
-Set the capture date above before saving the upload.
+Set the UTC capture date above before saving the upload.
                 </p>
               )}
             </div>
@@ -794,7 +810,7 @@ Set the capture date above before saving the upload.
           <Loader2 className="size-4 animate-spin text-emerald" />
           <div>
             <p className="text-sm text-ink">
-Searching Copernicus for{" "}
+Searching Copernicus for UTC date{" "}
               <span className="font-mono text-emerald">{date}</span>
             </p>
             <p className="text-[11px] text-mist">
@@ -834,9 +850,11 @@ error type · {failedSearch.kind}
           <SectionHeading
             eyebrow="Step 2 of 3 · Image results"
             title={
-              successfulSearch.status === "ok"
-                ? `${successfulSearch.scenes.length} image${successfulSearch.scenes.length === 1 ? "" : "s"} found`
-                : "No images for this exact search"
+              successfulSearch.truncated
+                ? "Search limit reached"
+                : successfulSearch.status === "ok"
+                  ? `${successfulSearch.scenes.length} image${successfulSearch.scenes.length === 1 ? "" : "s"} found`
+                  : "No images for this exact search"
             }
             description={successfulSearch.note}
             actions={
@@ -848,6 +866,16 @@ live Copernicus data
             }
           />
 
+          {truncationNotice && (
+            <Callout
+              tone="warn"
+              title="More results may exist"
+              icon={AlertTriangle}
+            >
+              {truncationNotice}
+            </Callout>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               label="images returned"
@@ -857,7 +885,7 @@ live Copernicus data
             <StatTile
               label="accepted"
               value={successfulSearch.counts.exactDateMatches}
-hint={successfulSearch.mode === "exact" ? "exact date" : "in date range"}
+hint={successfulSearch.mode === "exact" ? "exact UTC date" : "in UTC date range"}
               emphasis
             />
             <StatTile
@@ -890,6 +918,7 @@ hint={successfulSearch.mode === "exact" ? "exact date" : "in date range"}
           </div>
 
           {successfulSearch.status === "empty" ? (
+            successfulSearch.truncated ? null : (
             <Panel className="space-y-4">
               <div className="flex items-start gap-3">
                 <Satellite className="mt-0.5 size-5 text-warn" />
@@ -900,8 +929,8 @@ hint={successfulSearch.mode === "exact" ? "exact date" : "in date range"}
                   <p className="mt-1 text-xs leading-5 text-mist">
                     This is an empty result, not an error. No image was swapped
                     in. Sentinel-2 does not photograph every place every day. You
-                    can widen the search to a date range. Each result shows its
-                    real capture date.
+                    can widen the search to a UTC date range. Each result shows its
+                    real UTC capture date.
                   </p>
                 </div>
               </div>
@@ -929,13 +958,14 @@ Search ±7 days
               )}
               {successfulSearch.mode === "window" && (
                 <p className="text-[11px] text-mist">
-The date range was{" "}
+The UTC date range was{" "}
                   {successfulSearch.window?.startDate} to{" "}
                   {successfulSearch.window?.endDate}. No image exists in that
                   range for this area.
                 </p>
               )}
             </Panel>
+            )
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               {successfulSearch.scenes.map((scene) => {
@@ -952,7 +982,7 @@ The date range was{" "}
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusPill status={differs ? "WARN" : "PASS"} />
                       <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
-                        {differs ? "different capture date" : "exact date match"}
+                        {differs ? "different UTC date" : "exact UTC date match"}
                       </span>
                     </div>
                     {differs && (
@@ -1038,7 +1068,7 @@ Use this image
         <EmptyState
           icon={Radar}
           title="No image search yet"
-          description="Find a place, set the capture date and press Search images. Results come straight from Copernicus."
+          description="Find a place, set the UTC capture date and press Search images. Results come straight from Copernicus."
           action={
             <Button asChild variant="outline" className="border-edge text-ink">
               <Link to="/workspace/history" className="gap-2">

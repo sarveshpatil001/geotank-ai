@@ -61,6 +61,7 @@ export type ImagerySearchResult =
         filteredByCloud: number;
         malformedFeatures: number;
       };
+      truncated: boolean;
       note: string;
     }
   | CatalogueFailure
@@ -228,8 +229,12 @@ export const search = action({
           filteredByCloud: normalized.filteredByCloud,
           malformedFeatures: normalized.malformedFeatures,
         },
-        note:
-          status === "empty"
+        truncated: normalized.truncated,
+        note: normalized.truncated
+          ? status === "empty"
+            ? `Copernicus returned the first ${normalized.returnedFeatures} results and more may exist, so this date is not confirmed empty. Try a shorter date range.`
+            : `Copernicus returned the first ${normalized.returnedFeatures} results. There may be more; try a shorter date range.`
+          : status === "empty"
             ? mode === "exact"
               ? "Copernicus answered, but found no image taken on this exact date for this area. No other date was swapped in."
               : "Copernicus answered, but found no image in this date range for this area."
