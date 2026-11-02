@@ -32,6 +32,7 @@ import {
   buildUploadChecks,
   overallStatus,
   summarizeChecks,
+  type ValidationCheck,
 } from "../src/lib/scientific-validation";
 import { buildResearchReport, reportToMarkdown } from "../src/lib/report";
 import {
@@ -420,6 +421,20 @@ test("stored provider URLs are HTTPS-only Copernicus hosts", () => {
     ),
     true,
   );
+  assert.equal(isAllowedStoredUrl("http://datahub.creodias.eu/x"), false);
+  assert.equal(
+    isAllowedStoredUrl("https://datahub.creodias.eu.evil.com/x"),
+    false,
+  );
+  assert.equal(
+    isAllowedStoredUrl("https://evil.com/datahub.creodias.eu"),
+    false,
+  );
+  assert.equal(isAllowedStoredUrl("https://notdatahub.creodias.eu/x"), false);
+  assert.equal(
+    isAllowedStoredUrl("https://evil.datahub.creodias.eu/x"),
+    false,
+  );
   assert.equal(isAllowedStoredUrl("http://catalogue.dataspace.copernicus.eu/a"), false);
   assert.equal(isAllowedStoredUrl("https://evil.example/a"), false);
   assert.equal(isAllowedStoredUrl("s3://eodata/TCI.jp2"), false);
@@ -594,6 +609,28 @@ test("scope limits are classified separately and excluded from overall status", 
     },
   ];
   assert.equal(overallStatus(synthetic), "PASS");
+});
+
+test("old checks without kind are classified by check id", () => {
+  const checks = buildSceneChecks({
+    requestedDate: "2024-06-28",
+    scene,
+    dateMatch: "exact",
+  });
+  const date = checks.find((check) => check.id === "acquisition-date");
+  const level = checks.find((check) => check.id === "internal-liquid-level");
+  assert.ok(date, "expected a date check");
+  assert.ok(level, "expected a liquid-level scope limit");
+
+  const legacy: ValidationCheck[] = [date, level].map((check) => {
+    const copy = { ...check };
+    delete copy.kind;
+    return copy;
+  });
+
+  assert.equal(legacy.every((check) => check.kind === undefined), true);
+  assert.equal(level.status, "NOT MEASURABLE");
+  assert.equal(overallStatus(legacy), "PASS");
 });
 
 test("a user-selected nearby date is warned about, not hidden", () => {
@@ -827,6 +864,156 @@ test("report contains the required sections and never promotes estimates", () =>
   assert.match(markdown, /NOT MEASURABLE/);
   assert.match(markdown, /Contain[s]? modified Copernicus Sentinel data 2024/);
   assert.doesNotMatch(markdown, /\d+% accuracy/i);
+});
+
+test("scene and upload reports keep every plain-language caveat", () => {
+  const sceneChecks = buildSceneChecks({
+    requestedDate: "2024-06-28",
+    scene,
+    dateMatch: "exact",
+  });
+  const sceneProject: ResearchProjectRecord = {
+    _id: "caveat-scene",
+    _creationTime: 1,
+    title: "Caveat scene",
+    source: "catalogue",
+    location: {
+      label: "Rotterdam, Netherlands",
+      lat: 51.92,
+      lon: 4.47,
+      bbox: [4.0, 51.8, 4.5, 52.0],
+      source: "OpenStreetMap Nominatim",
+      attribution: "© OpenStreetMap contributors",
+      clamped: false,
+    },
+    requestedDate: "2024-06-28",
+    dateMatch: "exact",
+    scene,
+    upload: null,
+    checks: sceneChecks,
+    analysis: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  const uploadChecks = buildUploadChecks({
+    requestedDate: "2024-06-28",
+    summary: {
+      filename: "photo.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 2_000_000,
+      signatureOk: true,
+      sha256: "abc",
+      exifStatus: "absent",
+      exifDateOriginal: null,
+      exifHasGps: false,
+      width: 1200,
+      height: 800,
+    },
+    quality: null,
+  });
+  const uploadProject: ResearchProjectRecord = {
+    _id: "caveat-upload",
+    _creationTime: 1,
+    title: "Caveat upload",
+    source: "upload",
+    location: null,
+    requestedDate: "2024-06-28",
+    dateMatch: "upload",
+    scene: null,
+    upload: {
+      storageId: "storage",
+      filename: "photo.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 2_000_000,
+      width: 1200,
+      height: 800,
+      sha256: "abc",
+      signatureOk: true,
+      exifStatus: "absent",
+      exifDateOriginal: null,
+      exifHasGps: false,
+      exifMake: null,
+      exifModel: null,
+      declaredCaptureDate: "2024-06-28",
+      clientMetrics: null,
+    },
+    checks: uploadChecks,
+    analysis: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  function caveatText(
+    checks: ValidationCheck[],
+    project: ResearchProjectRecord,
+  ): string {
+    const report = buildResearchReport(
+      project,
+      [],
+      new Date("2026-11-01T00:00:00Z"),
+    );
+    return [
+      ...checks.map(
+        (check) => `${check.label} ${check.detail} ${check.rule}`,
+      ),
+      ...report.sections.flatMap((section) => [section.heading, ...section.lines]),
+    ].join("\n");
+  }
+
+  const caveats = {
+    a: [
+      /(?:cannot|can't|never|does not|do not)[^.]{0,140}(?:liquid level|inventory)/i,
+      /(?:liquid level|inventory)[^.]{0,120}(?:cannot|not|never)[^.]{0,60}(?:measur|show|infer)/i,
+    ],
+    b: [
+      /cloud cover[^.]{0,180}(?:whole tile|tile numbers|tile-level)/i,
+      /(?:whole tile|tile numbers|tile-level)[^.]{0,180}(?:not|never)[^.]{0,80}(?:target|tank)/i,
+    ],
+    c: [
+      /pixel size[\s\S]{0,200}pixels? wide/i,
+      /(?:10 m|ten met(?:er|re)s?)[^.]{0,160}(?:too coarse|few pixels|pixels? wide)/i,
+    ],
+    d: [
+      /(?:not a checked satellite product|source not checked)/i,
+      /upload[^.]{0,120}(?:not|never)[^.]{0,80}(?:verified|checked)/i,
+    ],
+    e: [
+      /(?:never|not)[^.]{0,80}(?:swapped|substituted|replaced)[^.]{0,60}(?:silently|without your choice)/i,
+      /no image was substituted/i,
+    ],
+    f: [
+      /cannot change (?:a )?number or (?:a )?(?:check )?status/i,
+      /no authority over (?:numbers|statuses)/i,
+    ],
+  };
+
+  function assertCaveats(
+    record: string,
+    text: string,
+    required: (keyof typeof caveats)[],
+  ) {
+    for (const key of required) {
+      assert.ok(
+        caveats[key].some((pattern) => pattern.test(text)),
+        `${record} is missing caveat ${key}`,
+      );
+    }
+  }
+
+  assertCaveats("scene", caveatText(sceneChecks, sceneProject), [
+    "a",
+    "b",
+    "c",
+    "e",
+    "f",
+  ]);
+  assertCaveats("upload", caveatText(uploadChecks, uploadProject), [
+    "a",
+    "d",
+    "e",
+    "f",
+  ]);
 });
 
 test("report uses stored calculation versions and prints entered inputs", () => {

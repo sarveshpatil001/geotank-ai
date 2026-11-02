@@ -352,3 +352,461 @@ dist/assets/index-phG4BG2y.js          484.50 kB │ gzip: 150.93 kB
 Live integration check (not a gate): 31 live checks passed against the development deployment, including the AI status query and the unchanged live AI interpretation path. Convex functions pushed successfully at 04:26:22.
 
 Host limitation: `.env.example` was not changed. The Vly host rejects every write to `.env*` as a sensitive file, and the task's hard rule also forbids editing `.env*`. The template therefore still lists only `VITE_CONVEX_URL`, `CONVEX_SITE_URL` and `CONVEX_DEPLOYMENT`; the optional server-side variables (`VLY_INTEGRATION_KEY`, `VLY_INTEGRATION_BASE_URL`, `AI_ENABLED`, `AI_DAILY_CAP`, `CDSE_STAC_TOKEN`, `CONVEX_URL`) are documented in `integrations.md` and `README.md` instead.
+
+## Verification pass
+
+Read this table at the start of every iteration. One backlog item is worked at a time. `PROGRESS.md` is the change ledger because the host blocks `git`/`gh`.
+
+| Item | Status | Files changed | Gate results | Evidence |
+|---|---|---|---|---|
+| V1. Security headers | DONE | `main.ts`, `src/lib/security-headers.ts`, `tests/security-headers.test.ts`, `index.html`; removed `public/_headers` | tsc 0; lint 0 errors; engine 40/40; Vitest 33/33; build 0 | Hono middleware applies tested CSP/baseline headers; asset cache only under `/assets/`; built HTML has no inline script |
+| V2. AI output guard | DONE | `src/convex/lib/aiGuard.ts`, `src/convex/ai.ts`, `tests/ai-guard.test.ts` | tsc 0; lint 0 errors; engine 40/40; Vitest 34/34; build 0; Convex pushed 07:58:46 | Input-backed numeric values pass; unsupported numbers and fill/inventory claims fail |
+| V3. Cost caps | DONE | `src/convex/lib/limits.ts`, `src/convex/files.ts`, `tests/limits.test.ts` | tsc 0; lint 0 errors; engine 40/40; Vitest 37/37; build 0; Convex pushed 08:02:30 | All finite defaults printed below; invalid overrides fall back; global imagery and upload daily caps wired |
+| V4. Old records | DONE | `src/lib/scientific-validation.ts`, `src/components/workspace/ValidationList.tsx`, `src/convex/validators.ts`, `scripts/verify-math.ts` | tsc 0; lint 0 errors; engine 41/41; Vitest 37/37; build 0; Convex pushed 08:05:12 | `kind` already optional; old records now classify scope limits by stable id; schema push succeeded |
+| V5. URL allowlist | DONE | `src/lib/catalogue.ts`, `scripts/verify-math.ts` | tsc 0; lint 0 errors; engine 41/41; Vitest 37/37; build 0 | CREODIAS is now an exact host; all five required cases pass, plus a lookalike subdomain |
+| V6. Delete-all wording | DONE | `src/pages/workspace/Settings.tsx`, `README.md`, `tests/data-controls.test.ts` | tsc 0; lint 0 errors; engine 41/41; Vitest 37/37; build 0 | Settings and README say account/email remain; test confirms the user row survives |
+| V7. Typed errors | NOT-NEEDED | none | No change; V6 gates remain green | Exact search returned zero hits; UI branches on typed status/kind fields |
+| V8. Caveat lock | DONE | `scripts/verify-math.ts`, `src/lib/report.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 37/37; build 0 | Scene and upload reports pass six plain-language caveat matchers; AI-status gap fixed |
+| V9. Final proof | DONE | `README.md`, `src/pages/workspace/Settings.tsx` (verification counts only) | tsc 0; lint 0 errors; engine 42/42; Vitest 37/37; build 0; Convex pushed 08:13:06 | Live script: 31 checks passed against `https://acoustic-opossum-370.convex.cloud` |
+
+### Verification iteration 0 — ledger created
+
+No source files changed. All nine items started as TODO. The prior copy pass is complete; the host still blocks `git`/`gh`, and `.env*` files remain off limits.
+
+### Verification iteration 1 — V1 evidence
+
+- `main.ts` is the production server: a Deno Hono app serving `./dist`, `./dist/assets`, and the SPA fallback. It sets no response headers.
+- `package.json` has `dev`, `build`, and `preview` scripts but no production `start` script; the production entry is `main.ts`.
+- `vite.config.ts` sets headers only for the Vite dev and preview servers. Those headers do not apply to `main.ts`.
+- `public/_headers` exists and is copied into `dist/_headers`. That file is read by Netlify/Cloudflare-style hosts, not by this Hono server.
+- `index.html` has a meta CSP without `frame-ancestors`. A meta CSP cannot enforce `frame-ancestors`.
+- `dist/index.html` contains no inline script; the built app loads `/assets/index-*.js` as an external module. The production CSP can use `script-src 'self'` without `'unsafe-inline'`.
+
+Test-first evidence: `tests/security-headers.test.ts` first failed with `Cannot find module '../src/lib/security-headers'`. It now passes two tests: exact CSP/baseline headers and immutable cache only for `/assets/*`.
+
+Implementation: `src/lib/security-headers.ts` owns the production CSP and baseline headers. `main.ts` applies them with Hono middleware before static serving. `index.html` no longer repeats a weaker meta CSP, and `public/_headers` was removed because this host does not read it. `vite.config.ts` still sets dev/preview-only headers separately.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+40 passed, 0 failed, 40 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  9 passed (9)
+      Tests  33 passed (33)
+   Start at  07:56:57
+   Duration  2.27s (import 47%, tests 33%, transform 17%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CgA313uS.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.59s
+```
+
+Built-output evidence: `dist/index.html` has one external module script and no meta CSP; `dist/_headers` and `public/_headers` no longer exist. No Convex source changed, so no Convex push was needed for V1.
+
+### Verification iteration 2 — V2 AI output guard
+
+Evidence: `src/convex/lib/aiGuard.ts` rejected every number carrying a volume, length or percentage unit. That blocked true statements such as “10 m resolution” and “18.66% cloud cover” even when those values were in `buildAiPayload` input. The existing test codified the over-broad behaviour.
+
+Test-first evidence: `tests/ai-guard.test.ts` was updated to require input-backed `10 m` and `18.66%` to pass. The targeted run failed with `expected { ok: false, … } to deeply equal { ok: true }`, then passed after the guard change.
+
+Implementation: `checkAiOutputSafety(output, input)` now collects numeric values from the exact payload sent to the model. A number with a unit is accepted only when its value appears in that input. Numbers absent from the input are rejected. Affirmative liquid-level, fill and inventory claims remain rejected even when the same number appears in the input. `ai.ts` passes the payload into the guard.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+40 passed, 0 failed, 40 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  9 passed (9)
+      Tests  34 passed (34)
+   Start at  07:59:15
+   Duration  2.39s (import 47%, tests 37%, transform 14%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CgA313uS.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.41s
+```
+
+Convex push: `✔ 07:58:46 Convex functions ready! (7.55s)`.
+
+### Verification iteration 3 — V3 cost caps
+
+Evidence: `src/convex/lib/limits.ts` had fixed per-user capacities, one global geocode bucket (`1` per second), and `AI_DAILY_CAP` with a default of `100`. There was no global daily imagery-search cap and no global cap on upload registration. `generateUploadUrl` had a per-user daily cap, but a new guest account could bypass it.
+
+Effective defaults now printed by `effectiveLimits({})`:
+
+| Bucket | Scope | Capacity / window | Env override | Ceiling |
+|---|---|---|---|---|
+| `aiHourly` | per user | 10 / hour | none | — |
+| `aiDaily` | per user | 100 / day (`DEFAULT_AI_DAILY_CAP`) | `AI_DAILY_CAP` | 10,000 |
+| `aiProjectCooldown` | per record | 1 / 60 seconds | none | — |
+| `geocodeGlobal` | global | 1 / second | `GEOCODE_GLOBAL_PER_SECOND` | 20 |
+| `geocodeUserHourly` | per user | 30 / hour | none | — |
+| `imagerySearchHourly` | per user | 30 / hour | none | — |
+| `imagerySearchGlobalDaily` | global | 500 / day | `IMAGERY_SEARCH_GLOBAL_DAILY_CAP` | 5,000 |
+| `imageryHealthHourly` | per user | 10 / hour | none | — |
+| `uploadDaily` | per user | 20 / day | none | — |
+| `uploadGlobalDaily` | global | 100 / day | `UPLOAD_GLOBAL_DAILY_CAP` | 1,000 |
+
+Test-first evidence: `tests/limits.test.ts` first failed because `LIMIT_DEFAULTS` did not exist. It now covers every default, empty/space/`NaN`/`0`/negative/`Infinity`/decimal fallback, valid overrides and ceiling clamps.
+
+Implementation: `effectiveLimits(env)` is the single source for runtime limits. `positiveIntegerOverride` requires a positive decimal integer and otherwise returns the code default. Imagery search now debits `imagery:search:global:day`; upload registration debits `upload:register:global:day` in `files.registerUpload` after validation and before the pending row is inserted.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+40 passed, 0 failed, 40 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:03:00
+   Duration  2.13s (import 45%, tests 38%, transform 15%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CgA313uS.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.42s
+```
+
+Convex push: `✔ 08:02:30 Convex functions ready! (8.19s)`.
+
+### Verification iteration 4 — V4 old records
+
+Evidence: `checkValidator` in `src/convex/validators.ts` already had `kind: v.optional(...)`, so no schema migration was needed. However, `ValidationCheck.kind` was required in TypeScript, and `overallStatus` treated every check without `kind` as evidence. An old scope limit with `NOT MEASURABLE` could therefore change the overall status.
+
+Test-first evidence: the new engine check “old checks without kind are classified by check id” first failed with `actual 'NOT MEASURABLE'` versus `expected 'PASS'`. It now passes.
+
+Implementation: `kind` is optional in `ValidationCheck`. `checkKind` classifies stored checks by stable id when `kind` is missing. The known scope-limit ids are `tank-scale-measurement`, `georeferencing`, `internal-liquid-level`, `liquid-inventory`, `upload-ground-scale`, `upload-tank-measurement`, `capacity-dimensions` and `capacity-vs-inventory`. `overallStatus` and the Settings/Project `ValidationList` grouping both use it. The stale validator comment saying `schemaValidation` was disabled was corrected to match `schema.ts`.
+
+Schema push: `bunx convex dev --once` succeeded at 08:05:12; no schema change was required because `kind` was already optional.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+41 passed, 0 failed, 41 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:05:41
+   Duration  2.17s (import 44%, tests 38%, transform 15%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-Jv1qZF2M.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.32s
+```
+
+### Verification iteration 5 — V5 URL allowlist
+
+Evidence: `isAllowedStoredUrl` required HTTPS but treated every allowlist entry as a suffix. `datahub.creodias.eu` was a named entry, yet `https://evil.datahub.creodias.eu/x` passed because it ended with `.datahub.creodias.eu`. That is wildcard matching, not an exact host.
+
+Test-first evidence: the new case `https://evil.datahub.creodias.eu/x` failed with `true !== false`. It now passes. The required cases also pass: `https://datahub.creodias.eu/x` is accepted; `http://datahub.creodias.eu`, `https://datahub.creodias.eu.evil.com`, `https://evil.com/datahub.creodias.eu` and `https://notdatahub.creodias.eu` are rejected.
+
+Implementation: `datahub.creodias.eu` moved to an exact-host set. `dataspace.copernicus.eu` and `sentinels.copernicus.eu` keep suffix matching for their real catalogue/licence subdomains. Protocol remains HTTPS-only.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+41 passed, 0 failed, 41 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:07:22
+   Duration  2.45s (import 46%, tests 38%, transform 13%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-Jv1qZF2M.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.25s
+```
+
+No `src/convex/` file changed, so V5 did not need a Convex push.
+
+### Verification iteration 6 — V6 delete-all wording
+
+Evidence: `settings.deleteBatch` deletes projects, calculations, pending uploads, user settings and audit entries. It never deletes the `users` row. The Settings confirmation said only “This removes every research record, uploaded image, calculation, setting and activity entry,” and the README said “delete everything,” which could imply account deletion.
+
+Implementation (wording only): Settings now says the sign-in account and email stay, both in the panel description and the confirmation. README now states that “Delete all” removes records, stored images, calculations, settings and activity entries but does not delete the sign-in account or email. No deletion behaviour changed. The existing deletion test now also asserts that the user row and email still exist after completion. This is a copy-only item, so no new behavioural test was required.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+41 passed, 0 failed, 41 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:09:13
+   Duration  2.10s (import 46%, tests 35%, transform 16%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-BFkInHsD.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.24s
+```
+
+No `src/convex/` file changed, so V6 did not need a Convex push.
+
+### Verification iteration 7 — V7 typed errors (NOT-NEEDED)
+
+Evidence: ran the exact requested search:
+
+```text
+$ rg -n "message\.includes|\.message ===|\.message\.(startsWith|match)|data\.message" src
+(no output; exit 1)
+```
+
+A wider review found only message construction and display, not message-text branching. For example, `Research.tsx` branches on `result.status`, `Project.tsx` branches on the AI result `status`, and typed `kind` values drive catalogue failures. No UI code decides behaviour from `message` text, so there is no branch to convert. No source file changed and no typed-code migration was needed.
+
+### Verification iteration 8 — V8 caveat lock
+
+Test-first evidence: added one engine check that builds a scene report/check list and an upload report/check list, then applies arrays of acceptable plain-language regexes for caveats (a)–(f). The first run failed with `scene is missing caveat f`: the report said AI cannot change a number but did not say it cannot change a status.
+
+Implementation: report section 8 now says AI “cannot change a number or a check status.” Section 16 now says it has “no authority over numbers or check statuses.” The test checks (a) liquid level and inventory cannot be measured, (b) cloud cover is tile-level not target-level, (c) 10 m pixels make a tank only a few pixels wide, (d) upload source is not verified, (e) dates are never silently replaced, and (f) AI cannot change numbers or statuses. Scene records are required to carry a, b, c, e and f; upload records are required to carry a, d, e and f.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:12:10
+   Duration  2.14s (import 46%, tests 36%, transform 16%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-D2Zh5hWH.js          484.48 kB │ gzip: 150.90 kB
+✓ built in 8.53s
+```
+
+No `src/convex/` file changed, so V8 did not need a Convex push.
+
+### Verification iteration 9 — V9 final proof
+
+Final tree changes: `README.md` and the Settings verification ledger now report the actual 42 engine checks and 37 tests across 10 files. The pre-existing 40/31 counts were stale after V1–V8. No behaviour changed.
+
+Convex push: `✔ 08:13:06 Convex functions ready! (8.12s)`. The later README/Settings count edit is frontend/docs only, so no second push was needed.
+
+Final gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  10 passed (10)
+      Tests  37 passed (37)
+   Start at  08:15:14
+   Duration  2.11s (import 46%, tests 35%, transform 17%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.01s
+```
+
+Live verification (not a gate): `CONVEX_URL=https://acoustic-opossum-370.convex.cloud bun run scripts/verify-live.ts` passed 31 checks. Last 5 lines:
+
+```text
+✓ all test records deleted
+✓ uploaded image deleted from storage
+✓ linked calculations deleted
+✓ record list is empty after deletion
+
+31 live checks passed against https://acoustic-opossum-370.convex.cloud
+```
+
+The live AI call also printed an `@vly-ai/integrations` warning about system messages in the messages field. It did not fail the call; no prompt or output was exposed. It is recorded as a known leftover and was not changed because it is outside this backlog.
+
+Manual browser smoke test was not run. The 360 px checklist is in the final response.

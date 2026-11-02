@@ -101,7 +101,7 @@ Horizontal cylinder (full capacity): `V = π × r² × L`
 Commands:
 
 ```bash
-bun run test:engine            # 40 deterministic checks (engine, catalogue,
+bun run test:engine            # 42 deterministic checks (engine, catalogue,
                                # validation rules, EXIF, upload headers, report)
 bunx vitest run                # Convex auth, upload, pagination, deletion, AI guards
 bun tsc -b --noEmit            # TypeScript + Convex generated types
@@ -111,10 +111,10 @@ CONVEX_URL="https://<deployment>.convex.cloud" bun run scripts/verify-live.ts
 
 Last verified results in the development deployment:
 
-- `40 passed, 0 failed` — engine/catalogue/validation tests, including reference
+- `42 passed, 0 failed` — engine/catalogue/validation tests, including reference
   volumes, unit invariance, invalid inputs, exact-date filtering, cloud
   exclusions, upload provenance and report sections.
-- `31 passed` across 8 Vitest files — ownership, rate limits, upload
+- `37 passed` across 10 Vitest files — ownership, rate limits, upload
   finalisation, pagination, scheduled deletion and AI safety guards.
 - `31 live checks passed` — disposable anonymous session; unauthenticated access
   rejected; live CDSE search returned a real scene; server-side STAC item fetch;
@@ -152,9 +152,10 @@ round-trip and print layout were not visually verified).
   and SHA-256 before creating a record; duplicate storage references are
   rejected and failed blobs are deleted.
 - Credentials stay in server-side environment variables; none are bundled.
-- Users can export their data, delete individual records (including stored
-  images) and delete everything. The activity log records actions without query
-  text or pixels.
+- Users can export their data and delete individual records (including stored
+  images). "Delete all" removes records, stored images, calculations, settings
+  and activity entries. It does not delete the sign-in account or email. The
+  activity log records actions without query text or pixels.
 
 ## Scope
 

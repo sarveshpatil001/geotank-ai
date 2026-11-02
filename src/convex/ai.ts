@@ -218,7 +218,7 @@ export const interpret = action({
         };
       }
 
-      const safety = checkAiOutputSafety(validated);
+      const safety = checkAiOutputSafety(validated, payload);
       if (!safety.ok) {
         await ctx.runMutation(internal.audit.record, {
           userId,

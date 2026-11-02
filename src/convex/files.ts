@@ -7,7 +7,10 @@ import {
   mutation,
 } from "./_generated/server";
 import { requireUser } from "./lib/auth";
-import { enforceUploadLimit } from "./lib/limits";
+import {
+  enforceUploadLimit,
+  enforceUploadRegistrationLimit,
+} from "./lib/limits";
 import { UPLOAD_LIMITS } from "../lib/scientific-validation";
 
 const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000;
@@ -104,6 +107,8 @@ export const registerUpload = mutation({
         `Images must be ${UPLOAD_LIMITS.maxBytes / (1024 * 1024)} MB or smaller.`,
       );
     }
+
+    await enforceUploadRegistrationLimit(ctx);
 
     const uploadId = await ctx.db.insert("pendingUploads", {
       userId,

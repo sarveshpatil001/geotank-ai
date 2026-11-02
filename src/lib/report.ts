@@ -183,7 +183,7 @@ export function buildResearchReport(
       "5. A date check was applied. Different dates are reported, never swapped in silently.",
       "6. Fixed rules ran and each result kept a note of where its evidence came from.",
       `7. Any tank calculation was run again by the fixed engine (${ENGINE_VERSION}) when saved.`,
-      "8. AI, when used, comments on the saved data only. It never supplies or changes a number.",
+      "8. AI, when used, comments on the saved data only. It cannot change a number or a check status.",
     ],
   });
 
@@ -289,7 +289,7 @@ export function buildResearchReport(
         : "No stored calculation engine version applies to this record.",
       `AI commentary: ${
         project.analysis
-          ? `${project.analysis.status} using ${project.analysis.model} at ${new Date(project.analysis.ranAt).toISOString()}. Commentary only. It has no authority over numbers.`
+          ? `${project.analysis.status} using ${project.analysis.model} at ${new Date(project.analysis.ranAt).toISOString()}. Commentary only. It has no authority over numbers or check statuses.`
           : "not run for this record"
       }`,
     ],

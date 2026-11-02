@@ -2,8 +2,8 @@ import { v } from "convex/values";
 
 /**
  * Shared validators so the schema and the functions cannot drift apart.
- * `schemaValidation` is disabled in schema.ts, but these validators still
- * produce accurate generated TypeScript types.
+ * `schemaValidation` is enabled in schema.ts, and these validators produce
+ * accurate generated TypeScript types.
  */
 
 export const volumeValidator = v.object({

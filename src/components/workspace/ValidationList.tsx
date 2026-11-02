@@ -1,7 +1,8 @@
 import { StatusPill } from "./primitives";
-import type {
-  EvidenceBasis,
-  ValidationCheck,
+import {
+  checkKind,
+  type EvidenceBasis,
+  type ValidationCheck,
 } from "@/lib/scientific-validation";
 
 const BASIS_LABELS: Record<EvidenceBasis, string> = {
@@ -40,9 +41,9 @@ function CheckItems({ checks }: { checks: ValidationCheck[] }) {
 }
 
 export function ValidationList({ checks }: { checks: ValidationCheck[] }) {
-  // Older records predate `kind`; treat those as evidence checks.
-  const evidence = checks.filter((check) => check.kind !== "scope-limit");
-  const scopeLimits = checks.filter((check) => check.kind === "scope-limit");
+  // Older records predate `kind`; classify those by their stable check ids.
+  const evidence = checks.filter((check) => checkKind(check) !== "scope-limit");
+  const scopeLimits = checks.filter((check) => checkKind(check) === "scope-limit");
 
   return (
     <div className="space-y-5">

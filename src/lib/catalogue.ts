@@ -380,12 +380,14 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-const STORED_URL_HOSTS = [
+const STORED_URL_SUFFIX_HOSTS = [
   "dataspace.copernicus.eu",
   "sentinels.copernicus.eu",
-  // CDSE returns its rendered quicklook from this Copernicus data hub.
-  "datahub.creodias.eu",
 ] as const;
+
+// CDSE returns its rendered quicklook from this exact data hub. No subdomain
+// is accepted, so a lookalike host cannot inherit the allowlist entry.
+const STORED_URL_EXACT_HOSTS = new Set(["datahub.creodias.eu"]);
 
 /** Stored external URLs are HTTPS-only and limited to Copernicus hosts. */
 export function isAllowedStoredUrl(value: string): boolean {
@@ -393,7 +395,8 @@ export function isAllowedStoredUrl(value: string): boolean {
     const url = new URL(value);
     if (url.protocol !== "https:") return false;
     const host = url.hostname.toLowerCase();
-    return STORED_URL_HOSTS.some(
+    if (STORED_URL_EXACT_HOSTS.has(host)) return true;
+    return STORED_URL_SUFFIX_HOSTS.some(
       (suffix) => host === suffix || host.endsWith(`.${suffix}`),
     );
   } catch {

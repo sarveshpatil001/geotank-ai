@@ -204,5 +204,8 @@ describe("scheduled account deletion", () => {
       return (await ctx.db.system.get(storageId)) === null;
     });
     expect(blobGone).toBe(true);
+
+    const account = await t.run(async (ctx) => ctx.db.get(userA));
+    expect(account?.email).toBe("delete-a@test.dev");
   });
 });

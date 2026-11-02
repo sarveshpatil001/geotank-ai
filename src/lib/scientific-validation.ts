@@ -28,7 +28,8 @@ export type CheckKind = "evidence" | "scope-limit";
 
 export type ValidationCheck = {
   id: string;
-  kind: CheckKind;
+  /** Missing on records written before the evidence/scope-limit split. */
+  kind?: CheckKind;
   label: string;
   status: CheckStatus;
   detail: string;
@@ -104,6 +105,23 @@ export const STATUS_GLOSSARY: { status: CheckStatus; meaning: string }[] = [
     meaning: "This check does not apply to this record.",
   },
 ];
+
+const SCOPE_LIMIT_CHECK_IDS = new Set([
+  "tank-scale-measurement",
+  "georeferencing",
+  "internal-liquid-level",
+  "liquid-inventory",
+  "upload-ground-scale",
+  "upload-tank-measurement",
+  "capacity-dimensions",
+  "capacity-vs-inventory",
+]);
+
+/** Old records have no `kind`; their stable ids still classify them. */
+export function checkKind(check: Pick<ValidationCheck, "id" | "kind">): CheckKind {
+  return check.kind ??
+    (SCOPE_LIMIT_CHECK_IDS.has(check.id) ? "scope-limit" : "evidence");
+}
 
 const CLOUD_RULE =
   "Cloud cover from Copernicus: 10% or less passes, 10–30% is a warning, over 30% is a warning with a tile limit, missing is cannot measure";
@@ -659,7 +677,7 @@ export function summarizeChecks(checks: ValidationCheck[]): ValidationSummary {
 export function overallStatus(checks: ValidationCheck[]): CheckStatus {
   // Scope limits describe what the tool cannot conclude; they must not make an
   // otherwise supported record look failed or unmeasurable.
-  const evidence = checks.filter((check) => check.kind !== "scope-limit");
+  const evidence = checks.filter((check) => checkKind(check) !== "scope-limit");
   if (evidence.some((check) => check.status === "FAIL")) return "FAIL";
   if (evidence.some((check) => check.status === "WARN")) return "WARN";
   if (evidence.some((check) => check.status === "NOT MEASURABLE"))

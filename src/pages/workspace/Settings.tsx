@@ -69,7 +69,7 @@ const LIMITATIONS: { label: string; status: string; detail: string }[] = [
     label: "Tank calculation engine",
     status: "TESTED",
     detail:
-      "40 fixed checks cover known volumes, unit changes, bad inputs, size limits, rounding, image data, check rules, camera data, URL safety and report sections. A separate 31-test Convex suite covers sign-in, limits, uploads, paging, deletion and AI guards.",
+      "42 fixed checks cover known volumes, unit changes, bad inputs, size limits, rounding, image data, check rules, camera data, URL safety and report sections. A separate 37-test suite covers sign-in, limits, uploads, paging, deletion, security headers and AI guards.",
   },
   {
     label: "Image uploads",
@@ -436,7 +436,7 @@ Check Copernicus
           <SectionHeading
             eyebrow="Your data"
             title="Export and delete"
-            description="Deletion removes this account's records, stored images and saved calculations."
+            description="Delete all removes this account's records, stored images, calculations, settings and activity. Your sign-in account and email stay."
           />
           <div className="flex flex-wrap gap-2">
             <Button
@@ -487,7 +487,8 @@ Check Copernicus
               </p>
               <p className="mt-1 text-[11px] leading-5 text-mist">
                 This removes every research record, uploaded image, calculation,
-                setting and activity entry. It cannot be undone.
+                setting and activity entry. It cannot be undone. Your sign-in
+                account and email are not deleted.
               </p>
               {deleteError && <p className="mt-2 text-xs text-danger">{deleteError}</p>}
               <div className="mt-3 flex gap-2">
