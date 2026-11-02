@@ -34,8 +34,12 @@ import { Link, useSearchParams } from "react-router";
 export default function HistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") === "calculations" ? "calculations" : "records";
-  const projects = useQuery(api.projects.list, { limit: 40 });
-  const calculations = useQuery(api.calculations.list, { limit: 40 });
+  const [recordLimit, setRecordLimit] = useState(40);
+  const [calculationLimit, setCalculationLimit] = useState(40);
+  const projects = useQuery(api.projects.list, { limit: recordLimit });
+  const calculations = useQuery(api.calculations.list, {
+    limit: calculationLimit,
+  });
   const removeCalculation = useMutation(api.calculations.remove);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -81,9 +85,9 @@ export default function HistoryPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="recent records"
+          label="loaded records"
           value={stats.records}
-          hint="most recent 40"
+          hint={`up to ${recordLimit}`}
         />
         <StatTile
           label="image uploads"
@@ -96,9 +100,9 @@ export default function HistoryPage() {
           hint="within those records"
         />
         <StatTile
-          label="recent calculations"
+          label="loaded calculations"
           value={stats.calculations}
-          hint="most recent 40"
+          hint={`up to ${calculationLimit}`}
         />
       </div>
 
@@ -145,7 +149,8 @@ export default function HistoryPage() {
               }
             />
           ) : (
-            projects.map((project) => {
+            <>
+              {projects.map((project) => {
               // Stored checks come from the schema validators; the shared
               // display helper keeps its own literal union for the basis field.
               const storedChecks = project.checks as unknown as ValidationCheck[];
@@ -192,7 +197,22 @@ export default function HistoryPage() {
                   </p>
                 </Link>
               );
-            })
+              })}
+              {projects.length >= recordLimit && recordLimit < 200 && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 border-edge bg-transparent text-ink"
+                    onClick={() =>
+                      setRecordLimit((limit) => Math.min(200, limit + 40))
+                    }
+                  >
+                    <Database className="size-4" /> Load more records
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -293,6 +313,21 @@ export default function HistoryPage() {
                 </div>
               </Panel>
             ))
+          )}
+          {(calculations?.length ?? 0) >= calculationLimit &&
+            calculationLimit < 200 && (
+            <div className="flex justify-center pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 border-edge bg-transparent text-ink"
+                onClick={() =>
+                  setCalculationLimit((limit) => Math.min(200, limit + 40))
+                }
+              >
+                <Calculator className="size-4" /> Load more calculations
+              </Button>
+            </div>
           )}
           {error && (
             <p className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">

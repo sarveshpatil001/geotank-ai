@@ -5,9 +5,15 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { AI_MODEL } from "./lib/aiConfig";
+import { checkAiOutputSafety } from "./lib/aiGuard";
 import { buildAiPayload } from "./lib/aiPayload";
 import { requireUser } from "./lib/auth";
-import { aiKillSwitchEngaged, enforceAiLimits } from "./lib/limits";
+import {
+  aiKillSwitchEngaged,
+  enforceAiLimits,
+  enforceAiProjectCooldown,
+} from "./lib/limits";
 
 /**
  * AI adapter — commentary only.
@@ -25,13 +31,14 @@ import { aiKillSwitchEngaged, enforceAiLimits } from "./lib/limits";
  *    call reports that state and stores nothing.
  */
 
-const MODEL = "gpt-4o-mini";
-const ADAPTER_VERSION = "@vly-ai/integrations@0.6.14 (ai.completion)";
 const MAX_OUTPUT_TOKENS = 900;
 
 export type AiInterpretResult =
   | { status: "ok"; analysis: StoredAnalysis }
-  | { status: "blocked" | "unavailable" | "error" | "malformed"; message: string }
+  | {
+      status: "blocked" | "unavailable" | "error" | "malformed" | "rejected";
+      message: string;
+    }
   | { status: "invalid"; message: string };
 
 type StoredAnalysis = {
@@ -121,27 +128,6 @@ function validateAnalysis(
   return { summary: summary.slice(0, 800), sections, limitations };
 }
 
-export const status = action({
-  args: {},
-  handler: async (ctx) => {
-    await requireUser(ctx);
-    const configured = Boolean(process.env.VLY_INTEGRATION_KEY);
-    const enabled = !aiKillSwitchEngaged();
-    return {
-      configured,
-      enabled,
-      model: MODEL,
-      adapter: ADAPTER_VERSION,
-      checkedAt: Date.now(),
-      note: !enabled
-        ? "AI interpretation is disabled by the deployment operator (AI_ENABLED=false)."
-        : configured
-        ? "The deployment has an AI integration key. The model is only called when you press Run AI interpretation, and only minimised metadata text is sent (no image pixels, filenames or exact coordinates)."
-        : "No AI integration key is configured for this deployment, so AI commentary is unavailable. Deterministic calculations and validation are unaffected.",
-    };
-  },
-});
-
 export const interpret = action({
   args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args): Promise<AiInterpretResult> => {
@@ -154,8 +140,6 @@ export const interpret = action({
           "AI interpretation is disabled by the deployment operator. Deterministic validation and calculations are unaffected.",
       };
     }
-
-    await enforceAiLimits(ctx, userId);
 
     const project = await ctx.runQuery(internal.projects.getOwnedInternal, {
       projectId: args.projectId,
@@ -184,6 +168,9 @@ export const interpret = action({
       };
     }
 
+    await enforceAiProjectCooldown(ctx, args.projectId);
+    await enforceAiLimits(ctx, userId);
+
     const payload = buildAiPayload(project);
 
     const client = createVlyIntegrations({
@@ -193,7 +180,7 @@ export const interpret = action({
 
     try {
       const response = await client.ai.completion({
-        model: MODEL,
+        model: AI_MODEL,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: buildUserPrompt(payload) },
@@ -231,9 +218,22 @@ export const interpret = action({
         };
       }
 
+      const safety = checkAiOutputSafety(validated);
+      if (!safety.ok) {
+        await ctx.runMutation(internal.audit.record, {
+          userId,
+          action: "analysis.rejected",
+          detail: `safety filter: ${safety.reason}`,
+        });
+        return {
+          status: "rejected",
+          message: `The model output was rejected by the scientific safety filter (${safety.reason}). Nothing was stored.`,
+        };
+      }
+
       const analysis: StoredAnalysis = {
         status: "succeeded",
-        model: MODEL,
+        model: AI_MODEL,
         ranAt: Date.now(),
         summary: validated.summary,
         sections: validated.sections,
@@ -250,7 +250,7 @@ export const interpret = action({
       await ctx.runMutation(internal.audit.record, {
         userId,
         action: "analysis.completed",
-        detail: `${MODEL} commentary stored for ${args.projectId}`,
+        detail: `${AI_MODEL} commentary stored for ${args.projectId}`,
       });
 
       return { status: "ok", analysis };

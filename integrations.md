@@ -1,142 +1,98 @@
-# VLY Integrations
+# VLY integration (AI commentary)
 
-First-order integrations for AI, email, and payments with automatic usage billing through VLY integration keys.
+This project uses the deployment's `@vly-ai/integrations` gateway only for
+optional metadata commentary. The deterministic engine, catalogue search,
+validation and reports never depend on it.
 
-## Environment Variables
+## Environment variables
 
-The following environment variables are automatically set during project creation:
+Server-side only:
 
-- `VLY_INTEGRATION_KEY`: Your unique integration key (format: `sk_*`)
-- `VLY_INTEGRATION_BASE_URL`: The base URL for the integration gateway (default: `https://integrations.freebuff.com/`)
+- `VLY_INTEGRATION_KEY` — integration key. Missing means AI is reported as
+  unavailable; the rest of the app still works.
+- `VLY_INTEGRATION_BASE_URL` — optional gateway base URL; the email-OTP helper
+  defaults to `https://integrations.vly.ai`.
 
-## Installation
+Optional controls:
 
-The `@vly-ai/integrations` package is already included in package.json.
+- `AI_ENABLED=false` — hard kill switch; `ai.interpret` returns `blocked`.
+- `AI_DAILY_CAP` — positive integer daily per-user cap (default 100).
 
-## Usage in Convex Actions
+Never expose `VLY_INTEGRATION_KEY` through a `VITE_*` variable or any client
+component.
+
+## Actual usage
+
+`src/convex/ai.ts` is a Node-runtime Convex action:
 
 ```typescript
 "use node";
 
-import { vly } from '../lib/vly-integrations';
+import { createVlyIntegrations } from "@vly-ai/integrations";
 import { action } from "./_generated/server";
 
-export const generateAIResponse = action({
+export const interpret = action({
+  args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args) => {
-    // AI Completions
-    const completion = await freebuff.com.completion({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'Hello!' }
-      ],
-      temperature: 0.7,
-      maxTokens: 150
+    const client = createVlyIntegrations({
+      deploymentToken: process.env.VLY_INTEGRATION_KEY,
+      debug: false,
     });
-    
-    return completion;
-  }
+
+    const response = await client.ai.completion({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: buildUserPrompt(payload) },
+      ],
+      temperature: 0.2,
+      maxTokens: 900,
+    });
+  },
 });
 ```
 
-## Available Features
+Do not copy the illustrative snippet literally: ownership checks,
+`AI_ENABLED`, rate limits, the per-project cooldown, JSON validation and the
+scientific output filter are part of the real handler.
 
-### AI Integration
-```typescript
-// Create completion
-const completion = await freebuff.com.completion({
-  model: 'gpt-4o-mini', // or 'gpt-4o', 'claude-3-haiku', etc.
-  messages: [...],
-  temperature: 0.7,
-  maxTokens: 150
-});
+## Data sent
 
-// Stream completion
-await freebuff.com.streamCompletion(
-  request,
-  (chunk: string) => console.log(chunk)
-);
+The prompt contains minimised catalogue/upload metadata only:
 
-// Generate embeddings
-const embeddings = await freebuff.com.embeddings("Your text here");
-```
+- no image pixels;
+- no filename;
+- no exact coordinates (coordinate-sourced locations become
+  `user-entered coordinates (withheld)`);
+- geocoder labels are reduced to their last two comma-separated components.
 
-### Email Integration
-```typescript
-// Send email
-const emailResult = await vly.email.send({
-  to: 'user@example.com',
-  subject: 'Welcome!',
-  html: '<h1>Welcome to our service!</h1>',
-  text: 'Welcome to our service!'
-});
+## Output handling
 
-// Send batch emails
-const batchResult = await vly.email.sendBatch([...emails]);
-```
+The model must return the structured JSON shape documented in `ai.ts`. The
+server rejects malformed output and then applies `checkAiOutputSafety`:
 
-### Payments Integration
-```typescript
-// Create payment intent
-const paymentIntent = await vly.payments.createPaymentIntent({
-  amount: 2000, // $20.00 in cents
-  currency: 'usd',
-  description: 'Premium subscription',
-  customer: {
-    email: 'customer@example.com'
-  }
-});
+- numbers carrying volume, length or percentage units are rejected;
+- affirmative liquid-level, fill or inventory claims are rejected, while
+  explicit negative limitations are allowed.
 
-// Create subscription
-const subscription = await vly.payments.createSubscription({...});
+Rejected output is never stored; the record keeps its previous analysis and the
+UI reports the rejection. Output is commentary, not evidence, and cannot add,
+remove or upgrade validation checks or calculations.
 
-// Create checkout session
-const session = await vly.payments.createCheckoutSession({...});
-```
+## Availability
 
-## Error Handling
+`api.aiStatus.status` is a reactive query used by Settings and the project
+viewer. It reports whether a key is configured and whether the operator kill
+switch is engaged, without calling the model. The action `api.ai.interpret` is
+the only path that spends credits.
 
-All methods return an ApiResponse object:
+## Error handling
 
-```typescript
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  usage?: {
-    credits: number;
-    operation: string;
-  };
-}
-```
+The adapter returns an `ApiResponse`-shaped result. The app distinguishes:
 
-Example error handling:
+- `unavailable` — no integration key;
+- `blocked` — kill switch or user setting;
+- `malformed` / `rejected` — schema or safety failure, nothing stored;
+- `error` — gateway failure, nothing stored.
 
-```typescript
-const result = await freebuff.com.completion({ ... });
-
-if (result.success) {
-  console.log('Response:', result.data);
-  console.log('Credits used:', result.usage?.credits);
-} else {
-  console.error('Error:', result.error);
-}
-```
-
-## Important Notes
-
-1. The integration key (`VLY_INTEGRATION_KEY`) is automatically injected during project creation
-2. All API calls are automatically billed to your deployment based on usage
-3. Must be used in Convex actions with `"use node"` directive
-4. The integration key should never be exposed to the client
-
-## Checking Integration Status
-
-To verify the integration is properly configured:
-
-```typescript
-const hasIntegration = !!process.env.VLY_INTEGRATION_KEY;
-if (!hasIntegration) {
-  console.error("VLY integration key not found");
-}
-```
+All failures are recorded as audit actions without prompt text or credentials.

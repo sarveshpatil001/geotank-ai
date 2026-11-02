@@ -10,6 +10,7 @@ import {
   StatTile,
 } from "@/components/workspace/primitives";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
 import { downloadTextFile } from "@/lib/report";
 import { cn } from "@/lib/utils";
@@ -29,11 +30,14 @@ import {
   Trash2,
   Wifi,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 
 type HealthResult = FunctionReturnType<typeof api.imagery.health>;
-type AiStatus = FunctionReturnType<typeof api.ai.status>;
+type AiStatus = FunctionReturnType<typeof api.aiStatus.status>;
+type ExportPage = FunctionReturnType<typeof api.settings.exportData>;
+type ExportProject = ExportPage["researchProjects"][number];
+type ExportCalculation = ExportPage["calculations"][number];
 
 const LIMITATIONS: { label: string; status: string; detail: string }[] = [
   {
@@ -46,19 +50,19 @@ const LIMITATIONS: { label: string; status: string; detail: string }[] = [
     label: "Deterministic tank engine",
     status: "TESTED",
     detail:
-      "32 automated checks cover reference volumes, unit invariance, non-finite inputs, range limits, rounding, catalogue normalisation, validation rules, EXIF parsing, URL safety and report sections.",
+      "40 deterministic engine checks cover reference volumes, unit invariance, non-finite inputs, range limits, rounding, catalogue normalisation, validation rules, EXIF parsing, URL safety and report sections. A separate 31-test Convex suite covers auth, limits, uploads, pagination, deletion and AI guards.",
   },
   {
     label: "Image upload pipeline",
     status: "IMPLEMENTED",
     detail:
-      "Signature, size, decode and EXIF checks run in the browser; Convex storage metadata is re-checked server-side. The full browser upload round-trip has not been verified in this session.",
+      "The browser prepares a preview and heuristic quality statistics. The server re-reads the stored blob, verifies size, magic bytes, header dimensions, EXIF and SHA-256, then finalises it into a record. The server round-trip is verified live; the browser UI has not been visually exercised in this session.",
   },
   {
     label: "AI commentary",
     status: "IMPLEMENTED",
     detail:
-      "The adapter is wired to the deployment's integration gateway and rejects unstructured output. It requires a runtime key; its output is never authoritative.",
+      "The adapter is wired to the deployment's integration gateway and rejects unstructured or unsafe output (numeric measurements, affirmative liquid-level claims). Availability is a query; runs have per-user limits and a 60 s per-project cooldown. Output is never authoritative.",
   },
   {
     label: "Research report",
@@ -89,11 +93,9 @@ export default function SettingsPage() {
   const deleteAll = useMutation(api.settings.deleteAll);
   const activity = useQuery(api.audit.recent, { limit: 12 });
   const checkHealth = useAction(api.imagery.health);
-  const getAiStatus = useAction(api.ai.status);
 
   const [aiEnabledBusy, setAiEnabledBusy] = useState(false);
-  const [aiInfo, setAiInfo] = useState<AiStatus | null>(null);
-  const [aiStatusError, setAiStatusError] = useState<string | null>(null);
+  const aiInfo: AiStatus | undefined = useQuery(api.aiStatus.status);
   const [health, setHealth] = useState<HealthResult | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -102,28 +104,14 @@ export default function SettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleteResult, setDeleteResult] = useState<string | null>(null);
+  const [deleteJobId, setDeleteJobId] = useState<Id<"deletionJobs"> | null>(
+    null,
+  );
+  const deletionJob = useQuery(
+    api.settings.deletionStatus,
+    deleteJobId ? { jobId: deleteJobId } : "skip",
+  );
   const [settingsError, setSettingsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void getAiStatus({})
-      .then((result) => {
-        if (active) setAiInfo(result);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setAiStatusError(
-            error instanceof Error
-              ? error.message
-              : "AI availability could not be checked.",
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [getAiStatus]);
 
   const handleAiToggle = async (value: boolean) => {
     setAiEnabledBusy(true);
@@ -159,11 +147,65 @@ export default function SettingsPage() {
     setExporting(true);
     setExportError(null);
     try {
-      const data = await convex.query(api.settings.exportData, {});
-      if (!data) throw new Error("No signed-in account data was returned.");
+      let firstPage: ExportPage | null = null;
+      let pages = 0;
+      const projectRows: ExportProject[] = [];
+      let cursor: string | null = null;
+      let done = false;
+      while (!done) {
+        const page: ExportPage = await convex.query(api.settings.exportData, {
+          table: "projects",
+          limit: 100,
+          cursor,
+        });
+        firstPage ??= page;
+        projectRows.push(...page.researchProjects);
+        cursor = page.cursor;
+        done = page.isDone;
+        pages += 1;
+        if (pages >= 1_000) {
+          throw new Error(
+            "The export exceeded 1,000 pages and was not truncated silently.",
+          );
+        }
+      }
+
+      const calculationRows: ExportCalculation[] = [];
+      cursor = null;
+      done = false;
+      while (!done) {
+        const page: ExportPage = await convex.query(api.settings.exportData, {
+          table: "calculations",
+          limit: 100,
+          cursor,
+        });
+        firstPage ??= page;
+        calculationRows.push(...page.calculations);
+        cursor = page.cursor;
+        done = page.isDone;
+        pages += 1;
+        if (pages >= 1_000) {
+          throw new Error(
+            "The export exceeded 1,000 pages and was not truncated silently.",
+          );
+        }
+      }
+
+      if (!firstPage) throw new Error("No signed-in account data was returned.");
       downloadTextFile(
         `tank-calculator-ai-export-${new Date().toISOString().slice(0, 10)}.json`,
-        JSON.stringify(data, null, 2),
+        JSON.stringify(
+          {
+            exportedAt: firstPage.exportedAt,
+            account: firstPage.account,
+            settings: firstPage.settings,
+            researchProjects: projectRows,
+            calculations: calculationRows,
+            note: firstPage.note,
+          },
+          null,
+          2,
+        ),
         "application/json",
       );
     } catch (error) {
@@ -175,20 +217,24 @@ export default function SettingsPage() {
     }
   };
 
+  const deletionFinished = deletionJob?.status === "complete";
+  const deletionBusy = deleting && !deletionFinished;
+  const deletionMessage =
+    deletionJob?.status === "complete"
+      ? `Deleted ${deletionJob.projectsDeleted} research record(s), ${deletionJob.imagesDeleted} stored image(s), ${deletionJob.calculationsDeleted} calculation(s) and ${deletionJob.auditLogsDeleted} activity entr${deletionJob.auditLogsDeleted === 1 ? "y" : "ies"}.`
+      : null;
+
   const handleDeleteAll = async () => {
     setDeleting(true);
     setDeleteError(null);
+    setDeleteJobId(null);
     try {
       const result = await deleteAll({});
-      setDeleteResult(
-        `Deleted ${result.projectsDeleted} research record(s), ${result.imagesDeleted} stored image(s) and ${result.calculationsDeleted} calculation(s).`,
-      );
-      setConfirmDelete(false);
+      setDeleteJobId(result.jobId);
     } catch (error) {
       setDeleteError(
         error instanceof Error ? error.message : "The deletion did not complete.",
       );
-    } finally {
       setDeleting(false);
     }
   };
@@ -287,9 +333,7 @@ export default function SettingsPage() {
                   ? aiInfo.configured
                     ? "configured"
                     : "not configured"
-                  : aiStatusError
-                    ? "check failed"
-                    : "checking"}
+                  : "checking"}
               </span>
             </div>
             <p className="mt-2 font-mono text-[10px] leading-4 text-mist">
@@ -298,7 +342,7 @@ export default function SettingsPage() {
               model · {aiInfo?.model ?? "unknown"}
             </p>
             <p className="mt-2 text-[11px] leading-4 text-mist">
-              {aiInfo?.note ?? aiStatusError ?? "Reading adapter status…"}
+              {aiInfo?.note ?? "Reading adapter status…"}
             </p>
           </div>
         </Panel>
@@ -397,19 +441,28 @@ export default function SettingsPage() {
               className="gap-2 border-danger/30 bg-transparent text-danger hover:bg-danger/10"
               onClick={() => {
                 setConfirmDelete(true);
-                setDeleteResult(null);
+                setDeleteJobId(null);
+                setDeleting(false);
               }}
             >
               <Trash2 className="size-4" /> Delete all data
             </Button>
           </div>
           {exportError && <p className="text-xs text-danger">{exportError}</p>}
-          {deleteResult && (
+          {deletionMessage && (
             <p className="rounded-lg border border-emerald/30 bg-emerald/[0.06] px-3 py-2 text-xs leading-5 text-mint">
-              {deleteResult}
+              {deletionMessage}
             </p>
           )}
-          {confirmDelete && (
+          {deletionJob?.status === "running" && (
+            <p className="rounded-lg border border-warn/30 bg-warn/[0.05] px-3 py-2 text-xs leading-5 text-warn">
+              Deletion in progress: {deletionJob.projectsDeleted} record(s),{" "}
+              {deletionJob.calculationsDeleted} calculation(s) and{" "}
+              {deletionJob.imagesDeleted} image(s) removed so far. The counts
+              only include committed deletions.
+            </p>
+          )}
+          {confirmDelete && !deletionFinished && (
             <div className="rounded-xl border border-danger/40 bg-danger/[0.05] p-4">
               <p className="text-sm font-medium text-ink">
                 Permanently delete everything for this account?
@@ -425,7 +478,7 @@ export default function SettingsPage() {
                   variant="ghost"
                   className="text-mist"
                   onClick={() => setConfirmDelete(false)}
-                  disabled={deleting}
+                  disabled={deletionBusy}
                 >
                   Cancel
                 </Button>
@@ -433,9 +486,9 @@ export default function SettingsPage() {
                   type="button"
                   className="gap-2 bg-danger text-[#1a0507] hover:bg-danger/90"
                   onClick={() => void handleDeleteAll()}
-                  disabled={deleting}
+                  disabled={deletionBusy}
                 >
-                  {deleting && <Loader2 className="size-4 animate-spin" />}
+                  {deletionBusy && <Loader2 className="size-4 animate-spin" />}
                   Delete everything
                 </Button>
               </div>

@@ -16,13 +16,15 @@ tank's internal liquid level or inventory.**
 - Live Copernicus Data Space Ecosystem (CDSE) STAC metadata search.
 - Explicit handling of empty results vs timeout, auth, rate-limit, upstream and
   malformed responses. Dates that differ from the request are never substituted.
-- Optional image upload with magic-byte checks, size limits, browser decoding,
-  EXIF extraction, SHA-256 and server-side storage verification.
+- Optional image upload with a pending-upload lifecycle; the server re-reads the
+  stored blob and verifies size, magic bytes, header dimensions, EXIF and
+  SHA-256 before finalising it into a record.
 - Scientific validation ledger with a stated evidence basis and rule per check.
 - Deterministic tank geometry engine (vertical and horizontal cylinders, full
   capacity only) with explicit units, validated ranges and server re-computation.
 - AI commentary restricted to metadata interpretation, stored separately and
-  unable to affect calculations or validation statuses.
+  unable to affect calculations or validation statuses. A deterministic output
+  filter rejects numeric measurements and affirmative liquid-level claims.
 - Research report with the 16 required sections, Markdown download and
   print/PDF via the browser.
 - Project history, per-record deletion, account-scoped access control, data
@@ -53,10 +55,12 @@ src/lib/report.ts                deterministic report builder
 
 src/convex/geocoding.ts          Nominatim + coordinate parsing, cached
 src/convex/imagery.ts            CDSE STAC search + health
-src/convex/projects.ts           records, uploads, ownership
+src/convex/projects.ts           records, server-side STAC fetch, uploads, ownership
 src/convex/calculations.ts       server-recomputed calculations
-src/convex/ai.ts                 metadata-only AI adapter
-src/convex/settings.ts           preferences, export, deletion
+src/convex/ai.ts                 metadata-only Node AI action
+src/convex/aiStatus.ts           AI availability query
+src/convex/lib/aiGuard.ts        deterministic model-output filter
+src/convex/settings.ts           preferences, paginated export, scheduled deletion
 ```
 
 ## Data sources, licensing and cost
@@ -97,8 +101,9 @@ Horizontal cylinder (full capacity): `V = π × r² × L`
 Commands:
 
 ```bash
-bun run test:engine            # 32 deterministic checks (engine, catalogue,
-                               # validation rules, EXIF, report)
+bun run test:engine            # 40 deterministic checks (engine, catalogue,
+                               # validation rules, EXIF, upload headers, report)
+bunx vitest run                # Convex auth, upload, pagination, deletion, AI guards
 bun tsc -b --noEmit            # TypeScript + Convex generated types
 bunx convex dev --once         # push functions / regenerate types
 CONVEX_URL="https://<deployment>.convex.cloud" bun run scripts/verify-live.ts
@@ -106,14 +111,17 @@ CONVEX_URL="https://<deployment>.convex.cloud" bun run scripts/verify-live.ts
 
 Last verified results in the development deployment:
 
-- `32 passed, 0 failed` — engine/catalogue/validation tests, including reference
+- `40 passed, 0 failed` — engine/catalogue/validation tests, including reference
   volumes, unit invariance, invalid inputs, exact-date filtering, cloud
   exclusions, upload provenance and report sections.
-- `28 live checks passed` — disposable anonymous session; unauthenticated access
-  rejected; live CDSE search returned a real scene; record creation; exact date
-  preserved; liquid-level and image-measurement checks NOT MEASURABLE; server
-  volume `62.83185307179586 m³`; linked calculation deletion; upload storage
-  round-trip; AI call returned an explicit outcome; export and cleanup verified.
+- `31 passed` across 8 Vitest files — ownership, rate limits, upload
+  finalisation, pagination, scheduled deletion and AI safety guards.
+- `31 live checks passed` — disposable anonymous session; unauthenticated access
+  rejected; live CDSE search returned a real scene; server-side STAC item fetch;
+  exact date preserved; liquid-level and image-measurement checks NOT
+  MEASURABLE; server volume `62.83185307179586 m³`; linked calculation deletion;
+  upload storage round-trip; paginated export; scheduled deletion; AI status
+  query returned an explicit outcome.
 
 Status meanings used throughout the app: `PASS`, `WARN`, `FAIL`,
 `NOT MEASURABLE`, `NOT VERIFIED`, `NOT APPLICABLE`, plus engineering
@@ -131,16 +139,18 @@ round-trip and print layout were not visually verified).
 - Cloud, shadow, viewing geometry and georeferencing affect any visual analysis;
   no independent ground control points are measured.
 - Uploaded files are not authenticated satellite products. EXIF can be edited.
-- A record's provider metadata is stored from the search response; this app does
-  not re-fetch and re-verify each item on save.
+- Scene metadata is fetched server-side from CDSE when a record is created. Later
+  views use that stored response; it is not periodically re-fetched.
 - AI commentary can be wrong and is not benchmarked. It is not evidence.
 - The app is a responsive web app/PWA manifest; offline caching is not implemented.
 
 ## Privacy and security
 
 - All queries/mutations/actions check the signed-in user and record ownership.
-- Uploads are limited to JPEG/PNG/WebP, 12 MiB, signature-checked in the browser
-  and re-checked against Convex storage metadata on the server.
+- Uploads are limited to JPEG/PNG/WebP and 12 MiB. The server re-reads the
+  stored blob and verifies size, magic bytes, header dimensions (≤ 50 MP), EXIF
+  and SHA-256 before creating a record; duplicate storage references are
+  rejected and failed blobs are deleted.
 - Credentials stay in server-side environment variables; none are bundled.
 - Users can export their data, delete individual records (including stored
   images) and delete everything. The activity log records actions without query

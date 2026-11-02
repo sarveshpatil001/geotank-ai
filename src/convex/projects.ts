@@ -335,7 +335,7 @@ export const list = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const userId = (await requireUser(ctx))._id;
-    const limit = Math.min(Math.max(args.limit ?? 30, 1), 60);
+    const limit = Math.min(Math.max(args.limit ?? 30, 1), 200);
     return await ctx.db
       .query("researchProjects")
       .withIndex("by_user_created", (q) => q.eq("userId", userId))

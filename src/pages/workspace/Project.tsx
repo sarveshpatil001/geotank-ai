@@ -58,7 +58,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 const TABS = ["imagery", "analysis", "validation", "report"] as const;
@@ -89,41 +89,14 @@ export default function ProjectPage() {
   const removeProject = useMutation(api.projects.remove);
   const clearAnalysis = useMutation(api.projects.clearAnalysis);
   const runInterpretation = useAction(api.ai.interpret);
-  const getAiStatus = useAction(api.ai.status);
 
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [aiRunning, setAiRunning] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiInfo, setAiInfo] = useState<{
-    configured: boolean;
-    model: string;
-    adapter: string;
-    note: string;
-  } | null>(null);
-  const [aiInfoError, setAiInfoError] = useState<string | null>(null);
+  const aiInfo = useQuery(api.aiStatus.status);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void getAiStatus({})
-      .then((result) => {
-        if (active) setAiInfo(result);
-      })
-      .catch((error: unknown) => {
-        if (active) {
-          setAiInfoError(
-            error instanceof Error
-              ? error.message
-              : "AI availability could not be checked.",
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [getAiStatus]);
 
   const record = project ? (project as unknown as ResearchProjectRecord) : null;
   const checks = useMemo(() => record?.checks ?? [], [record]);
@@ -826,12 +799,10 @@ export default function ProjectPage() {
                     ? aiInfo.configured
                       ? "configured at runtime"
                       : "no integration key"
-                    : aiInfoError
-                      ? "status check failed"
-                      : "checking…"}
+                    : "checking…"}
                 </p>
                 <p className="mt-1 text-[10px] leading-4 text-mist">
-                  {aiInfo?.note ?? aiInfoError ?? ""}
+                  {aiInfo?.note ?? ""}
                 </p>
               </div>
             </div>

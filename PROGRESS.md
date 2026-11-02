@@ -11,8 +11,8 @@ Host note: `git`/`gh` commands are blocked by the Vly host, so automated commits
 | 4. Lib bug batch (EXIF, windowDays, density, coordinates, dates, report) | DONE | `src/lib/exif.ts`, `src/lib/catalogue.ts`, `src/lib/tank-geometry.ts`, `src/lib/report.ts`, `src/lib/scientific-validation.ts`, `scripts/verify-math.ts` | All five gates green; final cumulative output in iteration 4+5 log | 39 engine checks (was 32); no scope creep |
 | 5. H2+M3+M8+M5 server-side STAC/upload finalisation, pending uploads, schema validation | DONE | `src/convex/projects.ts`, `files.ts`, `upload.ts`, `schema.ts`, `validators.ts`, `crons.ts`, `src/lib/image-header.ts`, `src/lib/catalogue.ts`, `src/lib/scientific-validation.ts`, `src/pages/workspace/Research.tsx`, `tests/image-header.test.ts`, `tests/upload-flow.test.ts`, `scripts/verify-live.ts`, `scripts/verify-math.ts` | All five gates green; see iteration 4+5 log | 22 vitest tests; 29 live checks green; third allowlisted host `datahub.creodias.eu` is required for CDSE quicklooks |
 | 6. M7 cloud WARN, evidence vs scope-limit checks | DONE | `src/lib/scientific-validation.ts`, `src/components/workspace/ValidationList.tsx`, `src/pages/workspace/Project.tsx`, `src/convex/validators.ts`, `scripts/verify-math.ts` | All five gates green; see iteration 6 log | Cloud >30% is a tile-level WARN; overall status counts evidence checks only |
-| 7. M4+L6 paginated export/delete/history | TODO | — | — | — |
-| 8. Misc: ai.status query, AI post-filter/cooldown, dead files, lockfile, CI, docs | TODO | — | — | — |
+| 7. M4+L6 paginated export/delete/history | DONE | `src/convex/settings.ts`, `schema.ts`, `projects.ts`, `calculations.ts`, `src/pages/workspace/Settings.tsx`, `src/pages/workspace/History.tsx`, `tests/data-controls.test.ts`, `scripts/verify-live.ts` | All five gates green; see iteration 7 log | Export pages projects/calculations separately; deletion is scheduled and pollable; History loads more |
+| 8. Misc: ai.status query, AI post-filter/cooldown, dead files, lockfile, CI, docs | DONE (host-limited docs) | `src/convex/aiStatus.ts`, `lib/aiConfig.ts`, `lib/aiGuard.ts`, `ai.ts`, `lib/limits.ts`, `src/pages/workspace/Settings.tsx`, `Project.tsx`, `tests/ai-guard.test.ts`, `tests/ai-status-cooldown.test.ts`, `scripts/verify-live.ts`, `.github/workflows/ci.yml`, `integrations.md`, `README.md`; removed `src/instrumentation.tsx`, `src/lib/vly-integrations.ts`, `sst-env.d.ts`, `package-lock.json` | All five gates green; see iteration 8 log | `.env.example` could not be edited: host blocks all `.env*` writes; documented below |
 
 ## Iteration log
 
@@ -252,3 +252,103 @@ dist/assets/index-DL828sWV.js          484.50 kB │ gzip: 150.93 kB
 ```
 
 Convex functions pushed successfully at 04:02:58.
+
+### Iteration 7 — paginated export, scheduled deletion, History load more
+
+Test-first evidence: `tests/data-controls.test.ts` was added before the backend changes. Its first run failed with `Validator error: Unexpected field \`limit\`` for `exportData` and `expected 'ok' to be 'running'` for `deleteAll`. The tests now pass, including three project pages at limit 1, two calculation pages, a completed deletion job with exact counts, cross-user isolation, and pending-blob cleanup.
+
+Implemented: `settings.exportData` paginates one table per call (`table: "projects" | "calculations"`, opaque cursor, 1–200 rows, `isDone`). Convex permits only one paginated query per function; the first implementation attempted both in one call and the live check failed with that exact error, so the final API returns one table page at a time and the client walks both sequences. `deletionJobs` records running/complete status and counts; `settings.deleteAll` schedules bounded internal batches (25 projects, 50 calculations/uploads/logs per transaction), and `settings.deletionStatus` lets the Settings UI report committed counts instead of claiming immediate completion. History now loads 40 rows at a time up to 200 for both records and calculations. The live script walks export pages and polls the deletion job.
+
+Final gate output (after the last lint fix to a test literal):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+40 passed, 0 failed, 40 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  6 passed (6)
+      Tests  24 passed (24)
+   Start at  04:17:55
+   Duration  1.65s (tests 42%, import 36%, transform 18%, worker 2%, environment 1%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-BwTH6tsX.js         35.77 kB │ gzip:  10.88 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-BIKzpB7D.js          484.50 kB │ gzip: 150.92 kB
+✓ built in 8.31s
+```
+
+Live integration check (not a gate): `CONVEX_URL=https://acoustic-opossum-370.convex.cloud bun run scripts/verify-live.ts` — 31 checks passed, including 5 export pages without truncation, a running deletion job, a completed job with counts (2 projects, 1 image, 1 calculation, 5 audit entries), and empty records afterward. Convex functions pushed successfully at 04:16:08.
+
+### Iteration 8 — AI query/guards, cleanup, CI and docs
+
+Test-first evidence: `tests/ai-guard.test.ts` and `tests/ai-status-cooldown.test.ts` were added before the final implementation integration. The guard test initially failed on the `"Inventory is low"` case; the inventory pattern was narrowed/extended and all four guard tests passed. The cooldown test verifies one model call per project, then a rejected second call within the same 60 s bucket. The status query test verifies authenticated access and unauthenticated rejection.
+
+Implemented: AI availability moved from a Node action to the V8 query `api.aiStatus.status` (`aiStatus.ts` plus shared `aiConfig.ts`); `ai.ts` retains only the Node-runtime interpretation action. Added `lib/aiGuard.ts`, which rejects any numeric volume/length/percentage statement and affirmative liquid-level/fill/inventory claims while allowing explicit negative limitations; rejected output is audited and never stored. Added a 60 s per-project token-bucket cooldown before the hourly/daily AI limits. Removed the unused `src/instrumentation.tsx`, `src/lib/vly-integrations.ts`, `sst-env.d.ts`; removed `package-lock.json` and retained `bun.lock`; added `.github/workflows/ci.yml` with frozen Bun install, tsc, lint, engine tests and Vitest; replaced the stale `integrations.md`; refreshed README/Settings verification claims. `scripts/verify-live.ts` now uses the status query.
+
+Gate output:
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ file signatures are detected from magic bytes, not extensions
+✓ report contains the required sections and never promotes estimates
+✓ report uses stored calculation versions and prints entered inputs
+
+40 passed, 0 failed, 40 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  8 passed (8)
+      Tests  31 passed (31)
+   Start at  04:25:47
+   Duration  2.00s (tests 46%, import 35%, transform 18%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/Project-D_78zrTu.js         35.52 kB │ gzip:  10.78 kB
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-phG4BG2y.js          484.50 kB │ gzip: 150.93 kB
+✓ built in 8.79s
+```
+
+Live integration check (not a gate): 31 live checks passed against the development deployment, including the AI status query and the unchanged live AI interpretation path. Convex functions pushed successfully at 04:26:22.
+
+Host limitation: `.env.example` was not changed. The Vly host rejects every write to `.env*` as a sensitive file, and the task's hard rule also forbids editing `.env*`. The template therefore still lists only `VITE_CONVEX_URL`, `CONVEX_SITE_URL` and `CONVEX_DEPLOYMENT`; the optional server-side variables (`VLY_INTEGRATION_KEY`, `VLY_INTEGRATION_BASE_URL`, `AI_ENABLED`, `AI_DAILY_CAP`, `CDSE_STAC_TOKEN`, `CONVEX_URL`) are documented in `integrations.md` and `README.md` instead.

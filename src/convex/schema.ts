@@ -76,6 +76,22 @@ const schema = defineSchema(
       at: v.number(),
     }).index("by_user_at", ["userId", "at"]),
 
+    // Account deletion is split across scheduled transactions. Counts only
+    // advance as rows are actually deleted, so the UI never claims a deletion
+    // that has not committed yet.
+    deletionJobs: defineTable({
+      userId: v.id("users"),
+      status: v.union(v.literal("running"), v.literal("complete")),
+      projectsDeleted: v.number(),
+      imagesDeleted: v.number(),
+      calculationsDeleted: v.number(),
+      pendingUploadsDeleted: v.number(),
+      settingsDeleted: v.number(),
+      auditLogsDeleted: v.number(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_user_created", ["userId", "createdAt"]),
+
     geocodeCache: defineTable({
       key: v.string(),
       payload: v.object({

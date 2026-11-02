@@ -160,7 +160,7 @@ if (search.status === "ok" && search.scenes.length > 0) {
   console.log("  no catalogue scenes returned; record creation skipped");
 }
 
-const ai = await client.action(api.ai.status, {});
+const ai = await client.query(api.aiStatus.status, {});
 console.log(
   `  AI adapter: configured=${ai.configured} model=${ai.model} adapter=${ai.adapter}`,
 );
@@ -228,14 +228,60 @@ if (uploaded.storageId) {
   }
 }
 
-const exported = await client.query(api.settings.exportData, {});
-ok(exported !== null && exported.researchProjects.length >= 2, "export includes the created records");
+let cursor: string | null = null;
+let exportDone = false;
+let exportPages = 0;
+let exportedProjects = 0;
+let exportedCalculations = 0;
+while (!exportDone) {
+  const page = await client.query(api.settings.exportData, {
+    table: "projects",
+    limit: 1,
+    cursor,
+  });
+  exportedProjects += page.researchProjects.length;
+  cursor = page.cursor;
+  exportDone = page.isDone;
+  exportPages += 1;
+  if (exportPages > 20) throw new Error("project export pagination did not finish");
+}
+cursor = null;
+exportDone = false;
+while (!exportDone) {
+  const page = await client.query(api.settings.exportData, {
+    table: "calculations",
+    limit: 1,
+    cursor,
+  });
+  exportedCalculations += page.calculations.length;
+  cursor = page.cursor;
+  exportDone = page.isDone;
+  exportPages += 1;
+  if (exportPages > 40) throw new Error("calculation export pagination did not finish");
+}
+ok(
+  exportedProjects >= 2 && exportedCalculations >= 1,
+  `export paginated ${exportPages} page(s) without truncation`,
+);
 
 const deletion = await client.mutation(api.settings.deleteAll, {});
-console.log(`  cleanup: ${JSON.stringify(deletion)}`);
-ok(deletion.projectsDeleted >= 2, "all test records deleted");
-ok(deletion.imagesDeleted >= 1, "uploaded image deleted from storage");
-ok(deletion.calculationsDeleted >= 1, "linked calculations deleted");
+console.log(`  cleanup started: ${JSON.stringify(deletion)}`);
+ok(deletion.status === "running", "account deletion is scheduled in batches");
+let deletionJob = deletion;
+for (let attempt = 0; attempt < 40; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const status = await client.query(api.settings.deletionStatus, {
+    jobId: deletion.jobId,
+  });
+  if (!status) throw new Error("deletion job disappeared");
+  deletionJob = status;
+  if (status.status === "complete") break;
+}
+console.log(`  cleanup finished: ${JSON.stringify(deletionJob)}`);
+ok(deletionJob.status === "complete", "deletion job reported completion");
+ok(deletionJob.projectsDeleted >= 2, "all test records deleted");
+ok(deletionJob.imagesDeleted >= 1, "uploaded image deleted from storage");
+ok(deletionJob.calculationsDeleted >= 1, "linked calculations deleted");
 
 const after = await client.query(api.projects.list, { limit: 40 });
 ok(after.length === 0, "record list is empty after deletion");

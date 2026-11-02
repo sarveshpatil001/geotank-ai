@@ -65,6 +65,19 @@ export async function enforceAiLimits(
   );
 }
 
+export async function enforceAiProjectCooldown(
+  ctx: LimitCtx,
+  projectId: Id<"researchProjects">,
+  now = Date.now(),
+) {
+  await debit(
+    ctx,
+    `ai:project:${projectId}:cooldown`,
+    { capacity: 1, windowMs: 60 * 1_000 },
+    now,
+  );
+}
+
 export async function enforceGeocodeLimits(
   ctx: LimitCtx,
   userId: Id<"users">,

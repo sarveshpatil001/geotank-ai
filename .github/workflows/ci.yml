@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install from lockfile
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun tsc -b --noEmit
+      - name: Lint
+        run: bun run lint
+      - name: Deterministic engine checks
+        run: bun run test:engine
+      - name: Convex unit tests
+        run: bunx vitest run
