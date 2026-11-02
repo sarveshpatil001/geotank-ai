@@ -53,7 +53,7 @@ export function Brand({
             TANK CALCULATOR <span className="text-emerald">AI</span>
           </span>
           <span className="mt-1 font-mono text-[9px] tracking-[0.26em] text-mist">
-            GEOSPATIAL RESEARCH
+            SATELLITE RESEARCH
           </span>
         </span>
       )}

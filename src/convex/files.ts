@@ -65,7 +65,7 @@ export const registerUpload = mutation({
       .first();
     if (existingPending) {
       if (existingPending.userId !== userId) {
-        throw new ConvexError("This upload reference belongs to another account.");
+        throw new ConvexError("This upload belongs to another account.");
       }
       return { uploadId: existingPending._id };
     }
@@ -76,8 +76,7 @@ export const registerUpload = mutation({
         q.eq("uploadStorageId", args.storageId),
       )
       .first();
-    if (existingProject) {
-      throw new ConvexError("This file has already been attached to a record.");
+    if (existingProject) {        throw new ConvexError("This file is already attached to a record.");
     }
 
     const storageId = args.storageId as Id<"_storage">;

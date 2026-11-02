@@ -86,8 +86,7 @@ export function FootprintMap({
         )}
       >
         <p className="text-xs leading-5 text-mist">
-          No footprint or bounding box was returned for this record, so no
-          spatial diagram is drawn.
+          This record has no map outline, so no diagram is drawn.
         </p>
       </div>
     );
@@ -186,16 +185,16 @@ export function FootprintMap({
           </text>
         </svg>
         <div className="pointer-events-none absolute right-2 top-2 rounded border border-edge/80 bg-navy/80 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-mint backdrop-blur">
-          footprint · not a basemap
+          outline · not a map
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-4 text-mist">
-        Provider-declared extent centred on{" "}
+        The outline comes from Copernicus, centred on{" "}
         <span className="font-mono text-mint">
           {formatCoordinate(center?.lat ?? centerLat, center?.lon ?? centerLon)}
         </span>
-        . Diagram only: no ground control points are measured, so overlay
-        alignment is not a measurement of accuracy.
+        . This is a diagram only. The app does not check ground control points,
+        so a good fit on the map is not proof of accuracy.
       </p>
     </div>
   );

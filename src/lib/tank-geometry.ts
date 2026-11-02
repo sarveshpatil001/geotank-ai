@@ -46,7 +46,7 @@ export const TANK_GEOMETRIES = {
     id: "vertical-cylinder",
     label: "Vertical cylinder",
     description:
-      "Upright circular cylinder. Uses the internal radius and the internal cylindrical height.",
+      "Upright round tank. Uses the inside radius and inside height.",
     formula: "V = π × r² × H",
     secondField: "height" as const,
   },
@@ -54,7 +54,7 @@ export const TANK_GEOMETRIES = {
     id: "horizontal-cylinder",
     label: "Horizontal cylinder",
     description:
-      "Cylinder lying on its side. Full-capacity only, using the internal radius and internal cylindrical length.",
+      "Tank on its side. Full capacity only. Uses the inside radius and inside length.",
     formula: "V = π × r² × L",
     secondField: "length" as const,
   },
@@ -97,10 +97,10 @@ export function isLengthUnit(value: string): value is LengthUnit {
 }
 
 const FIELD_NAMES: Record<DimensionField, string> = {
-  diameter: "internal diameter",
-  radius: "internal radius",
-  height: "internal cylindrical height",
-  length: "internal cylindrical length",
+  diameter: "inside diameter",
+  radius: "inside radius",
+  height: "inside height",
+  length: "inside length",
   density: "liquid density",
 };
 
@@ -148,7 +148,7 @@ export function parseLength(
         problem: {
           field,
           code: "NOT_A_NUMBER",
-          message: `The ${fieldName} must be a decimal number.`,
+          message: `Use a decimal number for the ${fieldName}.`,
         },
       };
     }
@@ -161,7 +161,7 @@ export function parseLength(
       problem: {
         field,
         code: "NOT_A_NUMBER",
-        message: `The ${fieldName} must be a decimal number.`,
+        message: `Use a decimal number for the ${fieldName}.`,
       },
     };
   }
@@ -171,7 +171,7 @@ export function parseLength(
       problem: {
         field,
         code: "NOT_FINITE",
-        message: `The ${fieldName} must be a finite number.`,
+        message: `Use a normal number for the ${fieldName}.`,
       },
     };
   }
@@ -193,7 +193,7 @@ export function parseLength(
       problem: {
         field,
         code: "NOT_FINITE",
-        message: `The ${fieldName} overflows the supported numeric range.`,
+        message: `The ${fieldName} is too large for this calculator.`,
       },
     };
   }
@@ -325,7 +325,7 @@ export function computeCapacity(input: CapacityInput): CapacityOutcome {
           field: "diameter",
           code: "NOT_FINITE",
           message:
-            "The calculation did not produce a finite positive volume. Check the dimensions.",
+            "The calculation did not produce a usable volume. Check the sizes.",
         },
       ],
     };
@@ -389,7 +389,7 @@ export function estimateMassFromDensity(
         problem: {
           field: "density",
           code: "NOT_A_NUMBER",
-          message: "The liquid density must be a decimal number.",
+          message: "Use a decimal number for the liquid density.",
         },
       };
     }
@@ -401,7 +401,7 @@ export function estimateMassFromDensity(
       problem: {
         field: "density",
         code: "NOT_FINITE",
-        message: "The liquid density must be a finite number.",
+        message: "Use a normal number for the liquid density.",
       },
     };
   }
@@ -411,7 +411,7 @@ export function estimateMassFromDensity(
       problem: {
         field: "density",
         code: "NON_POSITIVE",
-        message: "The liquid density must be greater than zero.",
+        message: "The liquid density must be more than zero.",
       },
     };
   }
@@ -434,7 +434,7 @@ export function estimateMassFromDensity(
       problem: {
         field: "density",
         code: "NOT_FINITE",
-        message: "A finite positive volume is required before estimating mass.",
+        message: "A usable volume is needed before estimating mass.",
       },
     };
   }

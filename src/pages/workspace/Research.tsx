@@ -130,7 +130,7 @@ export default function ResearchPage() {
           setSelected(result.candidates[0]);
         } else {
           setLocateNote(
-            `${result.candidates.length} places matched. Choose the one you intend to research — no candidate is selected for you.`,
+            `${result.candidates.length} places matched. Choose the one you want to study. The app does not pick for you.`,
           );
         }
       } else if (result.status === "empty" || result.status === "invalid") {
@@ -142,7 +142,7 @@ export default function ResearchPage() {
       setLocateError(
         error instanceof Error
           ? error.message
-          : "The location could not be resolved.",
+          : "The place could not be found.",
       );
     } finally {
       setLocating(false);
@@ -159,7 +159,7 @@ export default function ResearchPage() {
     setSearchError(null);
     setCreateError(null);
     if (!selected) {
-      setSearchError("Resolve and select a search area first.");
+      setSearchError("Find a place and choose a match first.");
       return;
     }
     const dateResult = validateCaptureDate(date);
@@ -168,7 +168,7 @@ export default function ResearchPage() {
       return;
     }
     if (parsedCloud !== null && Number.isNaN(parsedCloud)) {
-      setSearchError("Maximum cloud cover must be between 0 and 100.");
+      setSearchError("The cloud limit must be between 0 and 100.");
       return;
     }
     setSearching(true);
@@ -190,7 +190,7 @@ export default function ResearchPage() {
       setSearchError(
         error instanceof Error
           ? error.message
-          : "The catalogue search did not complete.",
+          : "The image search did not complete.",
       );
     } finally {
       setSearching(false);
@@ -210,7 +210,7 @@ export default function ResearchPage() {
       (result.query.maxCloudPct ?? null) === (parsedCloud ?? null);
     if (!areaMatches || !dateMatches || !cloudMatches) {
       setCreateError(
-        "The area, capture date or filter changed after this search. Run the search again so the stored record matches the provider query exactly.",
+        "The place, capture date or filter changed after this search. Search again so the saved record matches the request.",
       );
       return;
     }
@@ -228,7 +228,7 @@ export default function ResearchPage() {
       setCreateError(
         error instanceof Error
           ? error.message
-          : "The research record could not be created.",
+          : "The research record was not created.",
       );
     } finally {
       setCreatingItem(null);
@@ -251,21 +251,21 @@ export default function ResearchPage() {
         file.type as (typeof UPLOAD_LIMITS.allowedTypes)[number],
       )
     ) {
-      setUploadError("Only JPEG, PNG and WebP images are accepted.");
+      setUploadError("Use a JPEG, PNG or WebP image.");
       return;
     }
     if (file.size > UPLOAD_LIMITS.maxBytes) {
       setUploadError(
-        `That file is ${formatBytes(file.size)}. The limit is ${formatBytes(UPLOAD_LIMITS.maxBytes)}.`,
+        `This file is ${formatBytes(file.size)}. The limit is ${formatBytes(UPLOAD_LIMITS.maxBytes)}.`,
       );
       return;
     }
-    setUploadStage("Validating file signature and decoding image…");
+    setUploadStage("Checking the file type and opening the image…");
     const signature = await checkImageSignature(file, file.type);
     if (!signature.matchesDeclared || !signature.detected) {
       setUploadStage(null);
       setUploadError(
-        "The file signature does not match a supported image format. The file was not uploaded.",
+        "The file does not match a supported image type. It was not uploaded.",
       );
       return;
     }
@@ -275,7 +275,7 @@ export default function ResearchPage() {
       setUploadError(quality.message);
       return;
     }
-    setUploadStage("Reading embedded metadata…");
+    setUploadStage("Reading camera data inside the file…");
     const [exif, digest] = await Promise.all([extractExif(file), sha256Hex(file)]);
     setPrepared({
       file,
@@ -297,13 +297,13 @@ export default function ResearchPage() {
     const dateResult = validateCaptureDate(date);
     if (!dateResult.ok) {
       setUploadError(
-        `${dateResult.message} The declared capture date is required for an upload.`,
+        `${dateResult.message} An upload needs a capture date.`,
       );
       return;
     }
     setUploading(true);
     try {
-      setUploadStage("Requesting a short-lived upload URL…");
+      setUploadStage("Getting a short-lived upload link…");
       const uploadUrl = await generateUploadUrl();
       setUploadStage("Uploading the image to protected storage…");
       const response = await fetch(uploadUrl, {
@@ -316,16 +316,16 @@ export default function ResearchPage() {
       }
       const body = (await response.json()) as { storageId?: string };
       if (!body.storageId) {
-        throw new Error("Storage did not return a file identifier.");
+        throw new Error("Storage did not return a file ID.");
       }
-      setUploadStage("Registering the upload with the server…");
+      setUploadStage("Telling the server about the upload…");
       const pending = await registerUpload({
         storageId: body.storageId,
         filename: prepared.file.name,
         contentType: prepared.detectedType,
       });
       setUploadStage(
-        "Server is re-reading the file, dimensions, metadata and checksum…",
+        "The server is re-reading the file, size, camera data and checksum…",
       );
       const created = await finalizeUpload({
         uploadId: pending.uploadId,
@@ -358,19 +358,19 @@ export default function ResearchPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">Step 1 — 2 · Imagery request</p>
+          <p className="eyebrow">Step 1 of 3 · Image request</p>
           <h1 className="mt-2 font-display text-2xl font-medium tracking-tight text-ink sm:text-3xl">
-            New imagery research
+            New image search
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-mist">
-            Two required inputs: a location and the date the image was acquired.
-            Everything else is optional and explained before it is used.
+            You need two things: a place and the day the image was taken.
+            Everything else is optional and explained before use.
           </p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-edge/70 bg-abyss/60 px-3 py-2">
           <Satellite className="size-4 text-emerald" />
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
-            Sentinel-2 L2A · CDSE STAC
+Sentinel-2 L2A · Copernicus
           </span>
         </div>
       </div>
@@ -379,7 +379,7 @@ export default function ResearchPage() {
         <Panel className="space-y-6">
           <div>
             <Label htmlFor="location" className="mb-2 text-xs text-mist">
-              Location <span className="text-emerald">required</span>
+Place or coordinates <span className="text-emerald">required</span>
             </Label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative flex-1">
@@ -411,13 +411,13 @@ export default function ResearchPage() {
                 ) : (
                   <Search className="size-4" />
                 )}
-                Resolve area
+Find place
               </Button>
             </div>
             <p className="mt-2 text-[11px] leading-5 text-mist/80">
-              Coordinates are parsed locally. Place names use OpenStreetMap
-              Nominatim, and you choose the matching candidate. The search area is
-              capped at 0.6°; it is never silently expanded.
+              Coordinates are read on your device. Place names use OpenStreetMap.
+              You choose the right match. The search box is capped at 0.6° and is
+              never made larger without telling you.
             </p>
 
             {locateError && (
@@ -476,7 +476,7 @@ export default function ResearchPage() {
             {selected && (
               <div className="mt-4 rounded-xl border border-emerald/25 bg-emerald/[0.04] p-3.5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="eyebrow text-emerald">resolved search area</p>
+                  <p className="eyebrow text-emerald">search area</p>
                   <span className="font-mono text-[10px] text-mist">
                     {selected.source}
                   </span>
@@ -486,12 +486,12 @@ export default function ResearchPage() {
                   {formatCoordinate(selected.lat, selected.lon)}
                 </p>
                 <p className="mt-1.5 font-mono text-[10px] text-mist">
-                  bbox {selected.bbox.map((value) => value.toFixed(4)).join(", ")}
+box {selected.bbox.map((value) => value.toFixed(4)).join(", ")}
                 </p>
                 {selected.clamped && (
                   <p className="mt-2 text-[11px] leading-4 text-warn">
-                    The provider footprint was larger than the supported search
-                    span, so the box was capped around its centre.
+The place was larger than the allowed search area, so the box was
+                    capped around its centre.
                   </p>
                 )}
                 <p className="mt-2 text-[10px] leading-4 text-mist/70">
@@ -522,9 +522,9 @@ export default function ResearchPage() {
               />
             </div>
             <p className="mt-2 text-[11px] leading-5 text-mist/80">
-              This is the acquisition date, not the processing or ingestion date.
-              A future date is rejected; an exact date with no imagery is reported
-              as empty rather than replaced.
+This is the day the image was taken, not the day it was processed or
+              uploaded. Future dates are rejected. If no image exists on that
+              date, the app says so instead of swapping in another date.
             </p>
 
             <button
@@ -546,7 +546,7 @@ export default function ResearchPage() {
             {advancedOpen && (
               <div className="mt-3 space-y-2 rounded-lg border border-edge/60 bg-abyss/40 p-3">
                 <Label htmlFor="max-cloud" className="text-xs text-mist">
-                  Maximum provider cloud cover (%)
+Cloud cover limit (%)
                 </Label>
                 <Input
                   id="max-cloud"
@@ -562,8 +562,8 @@ export default function ResearchPage() {
                   className="h-10 border-edge bg-navy/70 text-ink placeholder:text-mist/50"
                 />
                 <p className="text-[11px] leading-4 text-mist/70">
-                  Applied by the catalogue query. Excluded scenes are counted and
-                  reported, never hidden.
+Copernicus applies this limit. The app counts and shows any images
+                  it leaves out.
                 </p>
               </div>
             )}
@@ -581,7 +581,7 @@ export default function ResearchPage() {
               ) : (
                 <Radar className="size-4" />
               )}
-              {searching ? "Searching catalogue…" : "Search imagery"}
+              {searching ? "Searching…" : "Search images"}
             </Button>
             <Button
               type="button"
@@ -591,7 +591,7 @@ export default function ResearchPage() {
               disabled={uploading}
             >
               <ImageUp className="size-4" />
-              Upload image (optional)
+Upload image (optional)
             </Button>
             <input
               ref={fileInputRef}
@@ -607,20 +607,19 @@ export default function ResearchPage() {
         </Panel>
 
         <div className="space-y-4">
-          <Panel className="space-y-4">
-            <p className="eyebrow">Request summary</p>
+          <Panel className="space-y-4">                <p className="eyebrow">Search summary</p>
             <dl className="space-y-3">
               <div>
                 <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                  location
+                  place
                 </dt>
                 <dd className="mt-1 text-sm text-ink">
-                  {selected ? selected.label : "Not resolved"}
+                  {selected ? selected.label : "Not chosen"}
                 </dd>
               </div>
               <div>
                 <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                  capture date
+capture date
                 </dt>
                 <dd className="mt-1 font-mono text-sm text-ink">
                   {date || "Not set"}
@@ -628,14 +627,14 @@ export default function ResearchPage() {
               </div>
               <div>
                 <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                  provider
+                  source
                 </dt>
                 <dd className="mt-1 text-sm text-ink">
                   Copernicus Data Space Ecosystem
                 </dd>
                 <dd className="mt-1 text-[11px] leading-4 text-mist">
-                  STAC API v1, anonymous read-only metadata search. Pixel
-                  downloads require a Copernicus account and are not requested.
+                  The app searches public image data only. It does not download
+                  image pixels or need a Copernicus account.
                 </dd>
               </div>
             </dl>
@@ -646,30 +645,29 @@ export default function ResearchPage() {
               className="inline-flex items-center gap-1.5 text-[11px] text-mint underline decoration-mint/30 underline-offset-4 hover:decoration-mint"
             >
               <ExternalLink className="size-3" />
-              CDSE STAC documentation
+Copernicus API docs
             </a>
           </Panel>
 
           <Callout
             tone="info"
             icon={ShieldAlert}
-            title="What this workflow will never claim"
+            title="What this search will not claim"
           >
-            A satellite image cannot reveal a tank&apos;s internal liquid level or
-            inventory. Sentinel-2 at 10 m is far too coarse for individual
-            small-tank geometry. Every record carries these limits explicitly.
+            A satellite image cannot show the liquid level or inventory inside a
+            tank. Sentinel-2 at 10 m is too coarse to measure a small tank. Every
+            record states these limits.
           </Callout>
 
           <Panel flat className="space-y-2.5">
             <div className="flex items-center gap-2">
               <Info className="size-3.5 text-emerald" />
-              <p className="eyebrow">Data handling</p>
+              <p className="eyebrow">How your data is handled</p>
             </div>
             <p className="text-[11px] leading-5 text-mist">
-              Images are stored in this deployment&apos;s protected Convex file
-              storage, only accessible through your signed-in records. AI
-              commentary, if used, receives metadata text — never image pixels or
-              exact coordinates.
+              Images are stored in this deployment&apos;s protected file storage.
+              Only your signed-in account can reach them. If you use AI, it gets
+              text only, never image pixels or exact coordinates.
             </p>
           </Panel>
         </div>
@@ -684,9 +682,9 @@ export default function ResearchPage() {
       {prepared && (
         <Panel className="space-y-4">
           <SectionHeading
-            eyebrow="Optional upload · step 4"
-            title="Uploaded image is not an authenticated satellite product"
-            description="The file has been decoded locally. Its provenance, ground scale and capture date remain unverified until you review the validation panel."
+            eyebrow="Optional upload · step 3"
+            title="Uploaded images are not checked satellite products"
+            description="The browser has read the file. Its source, ground scale and capture date are not proven until you review the checks."
           />
           <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
             <img
@@ -706,19 +704,19 @@ export default function ResearchPage() {
                 <StatTile
                   label="dimensions"
                   value={`${prepared.quality.width} × ${prepared.quality.height}`}
-                  hint="decoded by the browser"
+                  hint="read in this browser"
                 />
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
                 <div>
                   <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                    exif
+                    camera data (EXIF)
                   </dt>
                   <dd className="mt-0.5 text-ink">{prepared.exif.status}</dd>
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                    embedded capture date
+embedded capture date
                   </dt>
                   <dd className="mt-0.5 font-mono text-ink">
                     {prepared.exif.dateTimeOriginal ?? "not present"}
@@ -726,7 +724,7 @@ export default function ResearchPage() {
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                    gps in exif
+GPS in EXIF
                   </dt>
                   <dd className="mt-0.5 text-ink">
                     {prepared.exif.gps ? "present (not used for search)" : "absent"}
@@ -734,7 +732,7 @@ export default function ResearchPage() {
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                    sha-256
+                    File fingerprint (SHA-256)
                   </dt>
                   <dd className="mt-0.5 break-all font-mono text-[10px] text-ink">
                     {prepared.sha256?.slice(0, 24) ?? "unavailable"}…
@@ -742,8 +740,8 @@ export default function ResearchPage() {
                 </div>
               </dl>
               <p className="text-[11px] leading-5 text-mist">
-                EXIF is editable metadata. It corroborates — never proves — the
-                declared capture date. Declared date:{" "}
+                EXIF can be edited. It can support your date, but it cannot prove
+                it. Declared date:{" "}
                 <span className="font-mono text-mint">{date || "not set"}</span>.
               </p>
               <div className="flex flex-wrap gap-2">
@@ -758,7 +756,7 @@ export default function ResearchPage() {
                   ) : (
                     <Upload className="size-4" />
                   )}
-                  Store and validate upload
+Store and check upload
                 </Button>
                 <Button
                   type="button"
@@ -772,7 +770,7 @@ export default function ResearchPage() {
               </div>
               {!date && (
                 <p className="text-[11px] text-warn">
-                  Set the capture date above before storing the upload.
+Set the capture date above before saving the upload.
                 </p>
               )}
             </div>
@@ -786,8 +784,7 @@ export default function ResearchPage() {
         </Panel>
       )}
 
-      {uploadError && !prepared && (
-        <Callout tone="danger" title="Upload rejected" icon={AlertTriangle}>
+      {uploadError && !prepared && (            <Callout tone="danger" title="Upload rejected" icon={AlertTriangle}>
           {uploadError}
         </Callout>
       )}
@@ -797,11 +794,11 @@ export default function ResearchPage() {
           <Loader2 className="size-4 animate-spin text-emerald" />
           <div>
             <p className="text-sm text-ink">
-              Querying the Copernicus catalogue for{" "}
+Searching Copernicus for{" "}
               <span className="font-mono text-emerald">{date}</span>
             </p>
             <p className="text-[11px] text-mist">
-              This is a live request. No cached or demonstration results are shown.
+This is a live request. No cached or demo results are shown.
             </p>
           </div>
         </Panel>
@@ -815,7 +812,7 @@ export default function ResearchPage() {
               <p className="font-display text-sm font-medium text-ink">
                 {failedSearch.status === "error"
                   ? failedSearch.title
-                  : "Search input rejected"}
+                  : "Check the search details"}
               </p>
               <p className="mt-1 text-xs leading-5 text-mist">
                 {failedSearch.status === "error"
@@ -824,7 +821,7 @@ export default function ResearchPage() {
               </p>
               {failedSearch.status === "error" && (
                 <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-danger/80">
-                  failure kind · {failedSearch.kind}
+error type · {failedSearch.kind}
                 </p>
               )}
             </div>
@@ -835,17 +832,17 @@ export default function ResearchPage() {
       {successfulSearch && (
         <section className="space-y-4">
           <SectionHeading
-            eyebrow="Step 3 · Catalogue response"
+            eyebrow="Step 2 of 3 · Image results"
             title={
               successfulSearch.status === "ok"
-                ? `${successfulSearch.scenes.length} provider result${successfulSearch.scenes.length === 1 ? "" : "s"}`
-                : "No imagery for this exact request"
+                ? `${successfulSearch.scenes.length} image${successfulSearch.scenes.length === 1 ? "" : "s"} found`
+                : "No images for this exact search"
             }
             description={successfulSearch.note}
             actions={
               successfulSearch.status === "ok" ? (
                 <span className="rounded-full border border-emerald/30 bg-emerald/[0.06] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-emerald">
-                  live provider data
+live Copernicus data
                 </span>
               ) : undefined
             }
@@ -853,28 +850,28 @@ export default function ResearchPage() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
-              label="provider features"
+              label="images returned"
               value={successfulSearch.counts.returnedFeatures}
-              hint="returned by CDSE"
+              hint="from Copernicus"
             />
             <StatTile
               label="accepted"
               value={successfulSearch.counts.exactDateMatches}
-              hint={successfulSearch.mode === "exact" ? "exact date" : "in window"}
+hint={successfulSearch.mode === "exact" ? "exact date" : "in date range"}
               emphasis
             />
             <StatTile
-              label="different dates"
+              label="other dates"
               value={successfulSearch.counts.differentDateFeatures}
-              hint="rejected, not substituted"
+              hint="rejected, not swapped"
             />
             <StatTile
-              label="other exclusions"
+              label="other excluded"
               value={
                 successfulSearch.counts.filteredByCloud +
                 successfulSearch.counts.malformedFeatures
               }
-              hint="cloud filter + malformed"
+              hint="cloud limit + bad records"
             />
           </div>
 
@@ -882,13 +879,13 @@ export default function ResearchPage() {
             <span>query · {successfulSearch.collection.id}</span>
             <span>datetime · {successfulSearch.interval}</span>
             <span>
-              bbox ·{" "}
+              box ·{" "}
               {successfulSearch.query.bbox
                 .map((value) => Number(value).toFixed(4))
                 .join(", ")}
             </span>
             {successfulSearch.query.maxCloudPct !== null && (
-              <span>max cloud · {successfulSearch.query.maxCloudPct}%</span>
+              <span>cloud limit · {successfulSearch.query.maxCloudPct}%</span>
             )}
           </div>
 
@@ -898,13 +895,13 @@ export default function ResearchPage() {
                 <Satellite className="mt-0.5 size-5 text-warn" />
                 <div>
                   <p className="font-display text-sm font-medium text-ink">
-                    The catalogue answered successfully with zero matching scenes
+                    Copernicus answered, but found no images
                   </p>
                   <p className="mt-1 text-xs leading-5 text-mist">
-                    This is an empty result, not a failure, and no imagery was
-                    substituted. Sentinel-2 does not image every location every
-                    day. You can deliberately widen the search to a nearby date
-                    window; each result will show its actual acquisition date.
+                    This is an empty result, not an error. No image was swapped
+                    in. Sentinel-2 does not photograph every place every day. You
+                    can widen the search to a date range. Each result shows its
+                    real capture date.
                   </p>
                 </div>
               </div>
@@ -917,7 +914,7 @@ export default function ResearchPage() {
                     onClick={() => void handleSearch(3)}
                     disabled={searching}
                   >
-                    Search ±3 days
+Search ±3 days
                   </Button>
                   <Button
                     type="button"
@@ -926,16 +923,16 @@ export default function ResearchPage() {
                     onClick={() => void handleSearch(7)}
                     disabled={searching}
                   >
-                    Search ±7 days
+Search ±7 days
                   </Button>
                 </div>
               )}
               {successfulSearch.mode === "window" && (
                 <p className="text-[11px] text-mist">
-                  The selected window was{" "}
+The date range was{" "}
                   {successfulSearch.window?.startDate} to{" "}
-                  {successfulSearch.window?.endDate}. No result exists in that
-                  window for this area.
+                  {successfulSearch.window?.endDate}. No image exists in that
+                  range for this area.
                 </p>
               )}
             </Panel>
@@ -949,26 +946,26 @@ export default function ResearchPage() {
                   <Panel key={scene.itemId} className="space-y-4">
                     <ImagePreview
                       src={scene.thumbnailUrl}
-                      alt={`Provider quicklook for ${scene.itemId}`}
-                      caption="Provider quicklook. Rendered preview for orientation only — not radiometric data."
+                      alt={`Preview from Copernicus for ${scene.itemId}`}
+                      caption="Preview from Copernicus. For orientation only. Not measurement data."
                     />
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusPill status={differs ? "WARN" : "PASS"} />
                       <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
-                        {differs ? "different acquisition date" : "exact date match"}
+                        {differs ? "different capture date" : "exact date match"}
                       </span>
                     </div>
                     {differs && (
                       <p className="rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-[11px] leading-4 text-warn">
-                        Acquired {scene.acquiredAt}, not the requested{" "}
-                        {successfulSearch.requestedDate}. Selecting it records a
-                        window result and flags the difference.
+Taken on {scene.acquiredAt}, not the requested{" "}
+                        {successfulSearch.requestedDate}. Choosing it records a
+                        date-range result and flags the difference.
                       </p>
                     )}
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
                       <div>
                         <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                          acquisition (UTC)
+captured (UTC)
                         </dt>
                         <dd className="mt-1 font-mono text-[11px] leading-5 text-ink">
                           {scene.acquiredAt}
@@ -992,7 +989,7 @@ export default function ResearchPage() {
                       </div>
                       <div>
                         <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-                          platform / orbit
+satellite / orbit
                         </dt>
                         <dd className="mt-1 text-xs text-ink">
                           {platformLabel(scene.platform)}
@@ -1017,7 +1014,7 @@ export default function ResearchPage() {
                         ) : (
                           <ArrowRight className="size-4" />
                         )}
-                        Use this scene
+Use this image
                       </Button>
                       <span className="font-mono text-[10px] text-mist/70">
                         {scene.gridCode ?? "no grid code"}
@@ -1030,7 +1027,7 @@ export default function ResearchPage() {
           )}
 
           {createError && (
-            <Callout tone="danger" title="Record could not be created" icon={AlertTriangle}>
+            <Callout tone="danger" title="Could not create the record" icon={AlertTriangle}>
               {createError}
             </Callout>
           )}
@@ -1040,12 +1037,12 @@ export default function ResearchPage() {
       {!searchResult && !searching && (
         <EmptyState
           icon={Radar}
-          title="No catalogue query has run yet"
-          description="Resolve a location, choose the capture date and press Search imagery. Results come straight from the Copernicus Data Space Ecosystem STAC API."
+          title="No image search yet"
+          description="Find a place, set the capture date and press Search images. Results come straight from Copernicus."
           action={
             <Button asChild variant="outline" className="border-edge text-ink">
               <Link to="/workspace/history" className="gap-2">
-                View past records <ArrowRight className="size-4" />
+View past records <ArrowRight className="size-4" />
               </Link>
             </Button>
           }

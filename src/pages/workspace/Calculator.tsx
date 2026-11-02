@@ -81,8 +81,8 @@ export default function CalculatorPage() {
   }, [outcome, density]);
 
   const secondLabel = TANK_GEOMETRIES[geometry].secondField === "height"
-    ? "Internal cylindrical height"
-    : "Internal cylindrical length";
+    ? "Inside height"
+    : "Inside length";
 
   const handleSave = async () => {
     if (!outcome.ok) return;
@@ -101,7 +101,7 @@ export default function CalculatorPage() {
         setSaveError(result.message);
       } else {
         setSaveMessage(
-          `Saved. The stored record was recomputed server-side: ${formatVolume(
+          `Saved. The server recalculated the record: ${formatVolume(
             result.calculation.volume.cubicMeters,
             6,
           )} m³.`,
@@ -109,7 +109,7 @@ export default function CalculatorPage() {
       }
     } catch (error) {
       setSaveError(
-        error instanceof Error ? error.message : "The calculation could not be saved.",
+        error instanceof Error ? error.message : "The calculation was not saved.",
       );
     } finally {
       setSaving(false);
@@ -120,24 +120,23 @@ export default function CalculatorPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="eyebrow">Deterministic engine · {ENGINE_VERSION}</p>
+          <p className="eyebrow">Fixed engine · {ENGINE_VERSION}</p>
           <h1 className="mt-2 font-display text-2xl font-medium tracking-tight text-ink sm:text-3xl">
             Tank calculator
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-mist">
-            Ideal-cylinder geometry only, computed with IEEE-754 double precision
-            and validated inputs. The arithmetic is exact for the geometry it
-            models; the dimensions are yours, and physical verification is a
-            separate exercise.
+            This calculates the volume of a perfect cylinder from your inside
+            sizes. The maths is exact for that shape. The sizes are yours, so
+            check them separately.
           </p>
         </div>
         <span className="rounded-full border border-edge bg-abyss/60 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
-          no AI in the calculation path
+no AI in the maths
         </span>
       </div>
 
       {projectId && (
-        <Callout tone="info" title="Attached to a research record">
+        <Callout tone="info" title="Linked to a research record">
           {project
             ? `Saving here links the calculation to “${project.title}”.`
             : "Loading the linked research record…"}{" "}
@@ -197,7 +196,7 @@ export default function CalculatorPage() {
           <div className="space-y-4 border-t border-edge/60 pt-5">
             <div>
               <Label htmlFor="unit" className="mb-2 text-xs text-mist">
-                Unit for all entered dimensions
+Unit for all sizes
               </Label>
               <select
                 id="unit"
@@ -216,7 +215,7 @@ export default function CalculatorPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="diameter" className="mb-2 text-xs text-mist">
-                  Internal diameter ({LENGTH_UNITS[unit].symbol})
+                  Inside diameter ({LENGTH_UNITS[unit].symbol})
                 </Label>
                 <Input
                   id="diameter"
@@ -242,20 +241,19 @@ export default function CalculatorPage() {
               </div>
             </div>
             <p className="text-[11px] leading-5 text-mist/80">
-              Dimensions are internal, not external. Walls, fittings, internal
-              structures and dead stock are not modelled, and a circumference
-              measured on the outside cannot be used directly.
+Use inside sizes, not outside. The app does not include walls, fittings,
+              internal parts or dead stock. Do not use an outside circumference.
             </p>
           </div>
 
           <div className="border-t border-edge/60 pt-5">
             <div className="flex items-center gap-2">
               <Beaker className="size-4 text-mint" />
-              <p className="eyebrow">Optional · nominal mass estimate</p>
+              <p className="eyebrow">Optional · mass estimate</p>
             </div>
             <div className="mt-3">
               <Label htmlFor="density" className="mb-2 text-xs text-mist">
-                Liquid density (kg/m³), optional
+Liquid density (kg/m³), optional
               </Label>
               <Input
                 id="density"
@@ -267,9 +265,9 @@ export default function CalculatorPage() {
               />
             </div>
             <p className="mt-2 text-[11px] leading-5 text-mist/80">
-              This assumes the entire theoretical capacity is filled with a liquid
-              of the stated density at one temperature. It is an estimate of mass
-              at full capacity, not a measured inventory.
+This assumes the whole tank is full of liquid at the stated density and
+              one temperature. It is an estimate of mass at full capacity, not a
+              measurement.
             </p>
             {mass && !mass.ok && (
               <p className="mt-2 text-[11px] text-warn">{mass.problem.message}</p>
@@ -284,13 +282,13 @@ export default function CalculatorPage() {
               className="gap-2 bg-emerald text-[#04130f] hover:bg-emerald/90"
             >
               {saving && <Loader2 className="size-4 animate-spin" />}
-              Save calculation
+Save result
             </Button>
             <Link
               to="/workspace/history?tab=calculations"
               className="inline-flex items-center gap-1.5 text-xs text-mist transition hover:text-ink"
             >
-              Saved calculations <ArrowRight className="size-3.5" />
+Saved results <ArrowRight className="size-3.5" />
             </Link>
           </div>
           {saveMessage && (
@@ -307,7 +305,7 @@ export default function CalculatorPage() {
 
         <div className="space-y-4">
           <Panel className="space-y-4">
-            <SectionHeading eyebrow="Result" title="Theoretical geometric capacity" />
+            <SectionHeading eyebrow="Result" title="Full capacity of an ideal cylinder" />
             {outcome.ok ? (
               <>
                 <div className="rounded-xl border border-emerald/30 bg-emerald/[0.06] p-4">
@@ -337,9 +335,9 @@ export default function CalculatorPage() {
                     value={formatVolume(outcome.calculation.volume.oilBarrels, 4)}
                   />
                   <StatTile
-                    label="engine"
+                    label="formula version"
                     value={<span className="text-sm">{ENGINE_VERSION}</span>}
-                    hint="double precision, no intermediate rounding"
+                    hint="no rounding in the middle"
                   />
                 </div>
                 {mass?.ok && (
@@ -353,7 +351,7 @@ export default function CalculatorPage() {
                     <p className="mt-1 text-[11px] leading-4 text-mist">
                       {formatVolume(mass.kilograms, 1)} kg at{" "}
                       {formatVolume(mass.densityKgPerCubicMeter, 1)} kg/m³.
-                      ESTIMATED — not a measurement.
+                      ESTIMATE — not a measurement.
                     </p>
                   </div>
                 )}
@@ -361,7 +359,7 @@ export default function CalculatorPage() {
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-ink">
-                  Enter both internal dimensions to compute a capacity.
+                  Enter both inside sizes to calculate capacity.
                 </p>
                 <ul className="space-y-2">
                   {outcome.problems.map((problem) => (
@@ -379,34 +377,34 @@ export default function CalculatorPage() {
           </Panel>
 
           <Panel className="space-y-3">
-            <p className="eyebrow">Four quantities that are not interchangeable</p>
+            <p className="eyebrow">Four volumes that are not the same</p>
             <div className="space-y-2">
               <QuantityRow
-                label="Theoretical geometric capacity"
+                label="Full capacity from the formula"
                 value={
                   outcome.ok
                     ? `${formatVolume(outcome.calculation.volume.cubicMeters, 6)} m³`
                     : "not computed"
                 }
-                note="Exact for an ideal cylinder with the entered internal dimensions."
+                note="Exact for a perfect cylinder with your inside sizes."
                 tone="pass"
               />
               <QuantityRow
-                label="Nominal tank capacity"
+                label="Rated tank capacity"
                 value="not available"
-                note="Requires manufacturer data or a calibration certificate."
+                note="Needs maker data or a calibration certificate."
                 tone="absent"
               />
               <QuantityRow
                 label="Usable capacity"
                 value="not available"
-                note="Requires tank-specific dead stock, nozzle and safety limits."
+                note="Needs dead-stock, nozzle and safety limits for this tank."
                 tone="absent"
               />
               <QuantityRow
                 label="Measured liquid inventory"
-                value="not measurable"
-                note="Requires a verified liquid-level measurement, temperature and product data. Imagery can never supply it."
+                value="cannot measure"
+                note="Needs a checked liquid level, temperature and product data. An image cannot provide this."
                 tone="blocked"
               />
             </div>
@@ -415,13 +413,12 @@ export default function CalculatorPage() {
           <Callout
             tone="warn"
             icon={ShieldAlert}
-            title="Partial fill is deliberately not implemented"
+            title="Partial fill is not offered"
           >
-            Horizontal-cylinder partial-fill volume needs a circular-segment
-            formula, a defined liquid-level reference and validated reference
-            values before release. Until that validation exists, only full
-            capacity is offered — a wrong partial-fill number would be worse than
-            none.
+            Part-fill volume for a tank on its side needs a more complex formula,
+            a clear zero level and checked reference values. Until that is tested,
+            the app offers full capacity only. A wrong part-fill number would be
+            worse than none.
           </Callout>
         </div>
       </div>

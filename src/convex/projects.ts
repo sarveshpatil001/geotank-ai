@@ -93,13 +93,13 @@ export const createFromScene = action({
       args.itemId.length > 400 ||
       hasControlCharacter
     ) {
-      throw new ConvexError("The catalogue item identifier is not valid.");
+      throw new ConvexError("The Copernicus image ID is not valid.");
     }
     const collection = SUPPORTED_COLLECTIONS.find(
       (entry) => entry.id === args.collectionId,
     );
     if (!collection) {
-      throw new ConvexError("The requested catalogue collection is not supported.");
+      throw new ConvexError("This Copernicus image collection is not supported.");
     }
     const dateResult = validateCaptureDate(args.requestedDate);
     if (!dateResult.ok) {
@@ -120,8 +120,8 @@ export const createFromScene = action({
         error instanceof Error && error.name === "AbortError";
       throw new ConvexError(
         timedOut
-          ? "The catalogue did not return this item within 25 seconds. Nothing was stored."
-          : "The catalogue item could not be fetched. Nothing was stored.",
+          ? "Copernicus did not return this image in 25 seconds. Nothing was saved."
+          : "The Copernicus image could not be fetched. Nothing was saved.",
       );
     } finally {
       clearTimeout(timer);
@@ -129,7 +129,7 @@ export const createFromScene = action({
 
     if (!response.ok) {
       throw new ConvexError(
-        `The catalogue could not return this item (HTTP ${response.status}). Nothing was stored.`,
+        `Copernicus could not return this image (HTTP ${response.status}). Nothing was saved.`,
       );
     }
 
@@ -138,13 +138,13 @@ export const createFromScene = action({
       payload = await response.json();
     } catch {
       throw new ConvexError(
-        "The catalogue item response was not valid JSON. Nothing was stored.",
+        "Copernicus sent a reply that was not valid JSON. Nothing was saved.",
       );
     }
     const scene = normalizeStacItem(payload, collection.id);
     if (!scene || scene.itemId !== args.itemId) {
       throw new ConvexError(
-        "The catalogue item did not contain the required metadata. Nothing was stored.",
+        "Copernicus did not include the required data for this image. Nothing was saved.",
       );
     }
 
@@ -172,7 +172,7 @@ export const createFromSceneInternal = internalMutation({
     const scene = args.scene as unknown as CatalogueScene;
     if (!Number.isFinite(Date.parse(scene.acquiredAt))) {
       throw new ConvexError(
-        "The catalogue acquisition timestamp could not be parsed.",
+        "The Copernicus capture time could not be read.",
       );
     }
 
@@ -189,7 +189,7 @@ export const createFromSceneInternal = internalMutation({
 
     const validated = assertValidLocation(args.location);
     if (!validated) {
-      throw new ConvexError("A research area is required for a catalogue record.");
+      throw new ConvexError("A search area is needed for a Copernicus record.");
     }
     const location = {
       ...validated,

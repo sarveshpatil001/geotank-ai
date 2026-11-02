@@ -101,11 +101,11 @@ export function WorkspaceShell() {
 
         <footer className="print-hide mt-14 flex flex-col gap-2 border-t border-edge/60 pt-5 text-[11px] leading-5 text-mist/70 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Contains modified Copernicus Sentinel data where catalogue imagery is
-            referenced. Geocoding © OpenStreetMap contributors (ODbL).
+            Contains modified Copernicus Sentinel data where images are
+            referenced. Place lookup © OpenStreetMap contributors (ODbL).
           </p>
           <p className="font-mono text-[10px] uppercase tracking-[0.12em]">
-            deterministic engine · tank-math/1.0.0
+            fixed engine · tank-math/1.0.0
           </p>
         </footer>
       </main>

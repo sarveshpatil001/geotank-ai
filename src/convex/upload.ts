@@ -53,7 +53,7 @@ export const finalizeUpload = action({
       },
     );
     if (!pending) {
-      throw new ConvexError("Pending upload not found for this account.");
+      throw new ConvexError("This upload was not found for your account.");
     }
 
     try {
@@ -62,7 +62,7 @@ export const finalizeUpload = action({
         { storageId: pending.storageId },
       );
       if (alreadyAttached) {
-        throw new ConvexError("This file has already been attached to a record.");
+        throw new ConvexError("This file is already attached to a record.");
       }
 
       const blob = await ctx.storage.get(pending.storageId as Id<"_storage">);
@@ -77,7 +77,7 @@ export const finalizeUpload = action({
         );
       }
       if (sizeBytes !== pending.sizeBytes) {
-        throw new ConvexError("The stored file size changed during finalisation.");
+        throw new ConvexError("The stored file size changed before it was saved.");
       }
 
       const bytes = new Uint8Array(buffer);
@@ -87,19 +87,19 @@ export const finalizeUpload = action({
         : pending.contentType;
       if (!detectedType) {
         throw new ConvexError(
-          "The file is not a supported JPEG, PNG or WebP image.",
+          "The file is not a JPEG, PNG or WebP image.",
         );
       }
       if (detectedType !== declared) {
         throw new ConvexError(
-          "The file's magic bytes do not match its declared image type.",
+          "The file contents do not match the stated image type.",
         );
       }
 
       const header = parseImageHeader(buffer);
       if (!header) {
         throw new ConvexError(
-          "The image header could not be read, so its dimensions are not trusted.",
+          "The image size could not be read, so the file is not trusted.",
         );
       }
       if (header.error === "PIXEL_LIMIT") {

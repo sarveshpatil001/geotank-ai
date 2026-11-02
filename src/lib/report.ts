@@ -42,183 +42,183 @@ export function buildResearchReport(
   const sections: ReportSection[] = [];
 
   sections.push({
-    heading: "1. Research objective",
+    heading: "1. What this report covers",
     lines: [
       `Record: ${project.title}`,
       `Record type: ${
         project.source === "catalogue"
-          ? "Catalogue imagery search (provider metadata record)"
-          : "User-supplied image upload (provenance unverified)"
+          ? "Copernicus image record"
+          : "Your uploaded image (source not checked)"
       }`,
-      "Objective: identify whether satellite imagery exists for the requested location and capture date, record the provider metadata and its limitations, and compute theoretical tank capacity from user-supplied internal dimensions where applicable.",
-      "This report does not contain, and never infers, internal liquid level or liquid inventory.",
+      "Goal: check whether a satellite image exists for the place and date you asked for. Save what Copernicus returned and its limits. Work out full tank capacity from the inside sizes you entered, when you add a calculation.",
+      "This report never states an internal liquid level or a liquid inventory.",
     ],
   });
 
   sections.push({
-    heading: "2. User-entered location",
+    heading: "2. Place you entered",
     lines: project.location
       ? [
-          `Location label: ${project.location.label}`,
+          `Place label: ${project.location.label}`,
           `Coordinates: ${formatCoordinate(project.location.lat, project.location.lon)}`,
-          `Search bounding box (west, south, east, north): ${project.location.bbox
+          `Search box (west, south, east, north): ${project.location.bbox
             .map((value) => value.toFixed(5))
             .join(", ")}`,
-          `Location source: ${project.location.source}`,
-          `Area adjustment: ${
+          `Place lookup: ${project.location.source}`,
+          `Area change: ${
             project.location.clamped
-              ? "The area was capped by the app's maximum search span. The requested place was not silently expanded or substituted."
-              : "No span capping was applied."
+              ? "The place was larger than the allowed search area, so the box was capped around its centre. The place was not changed."
+              : "The search box was not capped."
           }`,
-          `Geocoding attribution: ${project.location.attribution}`,
+          `Lookup credit: ${project.location.attribution}`,
         ]
       : [
-          "No location was supplied for this upload.",
-          "No area search was performed: this record is a user-supplied file with a declared capture date only.",
+          "You gave no place for this upload.",
+          "No area search was run. This record is an uploaded file with a capture date you entered.",
         ],
   });
 
   sections.push({
-    heading: "3. Requested capture date",
+    heading: "3. Date you asked for",
     lines: [
-      `User-entered capture date: ${project.requestedDate}`,
-      `Selection mode: ${
+      `Capture date you entered: ${project.requestedDate}`,
+      `How it was chosen: ${
         project.dateMatch === "exact"
-          ? "Exact-date search as entered by the user"
+          ? "Exact date search"
           : project.dateMatch === "window"
-            ? "User-selected nearby-date window (the user explicitly chose this)"
-            : "Upload record — date declared by the user"
+            ? "Date range you chose (nearby dates allowed)"
+            : "Upload date you entered"
       }`,
-      "Semantics: the requested date is the acquisition date asked for. It is not a processing date and not a catalogue ingestion date.",
+      "This is the date the image was taken. It is not the processing date or the upload date.",
     ],
   });
 
   sections.push({
-    heading: "4. Actual acquisition date and time",
+    heading: "4. When the image was captured",
     lines: scene
       ? [
-          `Provider acquisition timestamp (UTC): ${scene.acquiredAt}`,
-          `Acquisition calendar date: ${acquiredDate ?? NOT_AVAILABLE}`,
-          `Processed/published timestamp returned by the provider: ${scene.publishedAt ?? "Not reported"}`,
-          `Catalogue record updated at: ${scene.updatedAt ?? "Not reported"}`,
-          `Date agreement with the request: ${
+          `Capture time from Copernicus (UTC): ${scene.acquiredAt}`,
+          `Capture date: ${acquiredDate ?? NOT_AVAILABLE}`,
+          `Published: ${scene.publishedAt ?? "Not reported"}`,
+          `Record updated: ${scene.updatedAt ?? "Not reported"}`,
+          `Date match: ${
             project.dateMatch === "exact" && acquiredDate === project.requestedDate
-              ? "Exact match"
-              : "The acquisition date differs from the requested date. This record is flagged and was not substituted silently."
+              ? "The capture date matches your request"
+              : "The capture date is not the date you asked for. This record flags the difference and no image was substituted silently."
           }`,
         ]
       : upload
         ? [
-            `Declared capture date: ${upload.declaredCaptureDate}`,
-            `Embedded EXIF DateTimeOriginal: ${upload.exifDateOriginal ?? "Not present"}`,
-            "No provider acquisition timestamp exists for an uploaded file, so no acquisition time can be stated.",
+            `Capture date you entered: ${upload.declaredCaptureDate}`,
+            `EXIF capture time: ${upload.exifDateOriginal ?? "Not present"}`,
+            "An uploaded file has no Copernicus capture time.",
           ]
-        : ["No imagery record is attached to this project."],
+        : ["No image record is attached to this project."],
   });
 
   sections.push({
-    heading: "5. Data source and product identifier",
+    heading: "5. Source and image ID",
     lines: scene
       ? [
-          `Provider: ${scene.providerName}`,
-          `Service: STAC API v1 (https://stac.dataspace.copernicus.eu/v1/)`,
+          `Source: ${scene.providerName}`,
+          `Service: Copernicus image service (STAC API v1, https://stac.dataspace.copernicus.eu/v1/)`,
           `Collection: ${scene.collectionName} (${scene.collectionId})`,
-          `Product / scene identifier: ${scene.itemId}`,
-          `Platform: ${platformLabel(scene.platform)}`,
+          `Image ID: ${scene.itemId}`,
+          `Satellite: ${platformLabel(scene.platform)}`,
           `Orbit: ${scene.orbitState ?? "Not reported"}`,
-          `MGRS grid code: ${scene.gridCode ?? "Not reported"}`,
-          `Provider record link: ${scene.selfUrl ?? "Not returned by the provider"}`,
-          `Scene footprint bbox: ${scene.bbox ? scene.bbox.map((value) => value.toFixed(4)).join(", ") : "Not returned"}`,
+          `Map square: ${scene.gridCode ?? "Not reported"}`,
+          `Copernicus record: ${scene.selfUrl ?? "Not returned by Copernicus"}`,
+          `Image box: ${scene.bbox ? scene.bbox.map((value) => value.toFixed(4)).join(", ") : "Not returned"}`,
         ]
       : upload
         ? [
-            "Source: user upload stored in this project's private storage. Not an authenticated satellite product.",
-            `Filename: ${upload.filename}`,
-            `Declared MIME type: ${upload.contentType}`,
+            "Source: your upload, stored in this project's private storage. This is not a checked satellite product.",
+            `File name: ${upload.filename}`,
+            `File type: ${upload.contentType}`,
             `Size: ${(upload.sizeBytes / (1024 * 1024)).toFixed(2)} MiB`,
-            `SHA-256 of the stored file: ${upload.sha256 ?? "Not computed"}`,
-            `EXIF metadata: ${upload.exifStatus}`,
-            `Camera make/model from EXIF: ${upload.exifMake ?? "—"} / ${upload.exifModel ?? "—"}`,
+            `File fingerprint (SHA-256): ${upload.sha256 ?? "Not computed"}`,
+            `EXIF data: ${upload.exifStatus}`,
+            `Camera from EXIF: ${upload.exifMake ?? "—"} / ${upload.exifModel ?? "—"}`,
           ]
         : ["No source record."],
   });
 
   sections.push({
-    heading: "6. Available spatial resolution",
+    heading: "6. Pixel size",
     lines: scene
       ? [
-          `Provider-declared resolution: ${formatResolution(scene.resolutionM)}`,
+          `Pixel size from Copernicus: ${formatResolution(scene.resolutionM)}`,
           scene.resolutionM !== null
-            ? `Pixel ground scale limits measurement: a 20–40 m diameter tank spans approximately ${Math.max(1, Math.floor(20 / scene.resolutionM))}–${Math.max(1, Math.floor(40 / scene.resolutionM))} pixels.`
-            : "Without a declared ground sample distance, feature scale cannot be assessed.",
+            ? `At this pixel size, a 20–40 m tank is only about ${Math.max(1, Math.floor(20 / scene.resolutionM))}–${Math.max(1, Math.floor(40 / scene.resolutionM))} pixels wide.`
+            : "Copernicus reported no pixel size, so feature scale cannot be checked.",
         ]
       : [
-          "Ground sample distance for an uploaded image: NOT MEASURABLE without acquisition geometry and an independent scale reference.",
+          "Ground scale for an uploaded image: NOT MEASURABLE without capture position and a scale reference.",
         ],
   });
 
   sections.push({
     heading: "7. Image quality",
     lines: [
-      `Provider cloud cover: ${scene ? formatCloudCover(scene.cloudCoverPct) : "Not applicable to uploads"}`,
+      `Cloud cover from Copernicus: ${scene ? formatCloudCover(scene.cloudCoverPct) : "Not applicable to an upload"}`,
       scene && scene.statistics.length
-        ? `Provider scene classification: ${scene.statistics
+        ? `Copernicus tile breakdown: ${scene.statistics
             .map((entry) => `${entry.label} ${entry.value}%`)
             .join(", ")}`
-        : "Provider scene classification: not returned",
+        : "Copernicus tile breakdown: not returned",
       upload?.clientMetrics
-        ? `Client-computed upload statistics (heuristic): mean luminance ${formatDecimal(upload.clientMetrics.meanLuma, 1)}, contrast σ ${formatDecimal(upload.clientMetrics.stdDevLuma, 1)}, focus proxy ${formatDecimal(upload.clientMetrics.laplacianVariance, 1)} on a ${upload.clientMetrics.sampleWidth}×${upload.clientMetrics.sampleHeight} downscale.`
-        : "No pixel statistics were computed for this record.",
-      `Preview availability: ${scene?.thumbnailUrl ? "Provider quicklook available (rendered preview, not radiometric data)" : "No preview asset"}`,
+        ? `Basic numbers from your browser: mean brightness ${formatDecimal(upload.clientMetrics.meanLuma, 1)}, contrast ${formatDecimal(upload.clientMetrics.stdDevLuma, 1)}, focus ${formatDecimal(upload.clientMetrics.laplacianVariance, 1)} on a ${upload.clientMetrics.sampleWidth}×${upload.clientMetrics.sampleHeight} downscale.`
+        : "No image statistics were computed for this record.",
+      `Preview: ${scene?.thumbnailUrl ? "Copernicus preview available (for orientation only, not measurement data)" : "No preview available"}`,
     ],
   });
 
   sections.push({
-    heading: "8. Processing methodology",
+    heading: "8. How the record was made",
     lines: [
-      "1. Location validated and resolved to a bounded search area (user coordinates parsed directly, or OpenStreetMap Nominatim geocoding).",
-      "2. Capture date validated as a real, non-future calendar date and converted to a closed UTC one-day interval.",
-      "3. Catalogue query executed against the Copernicus Data Space Ecosystem STAC API (anonymous read-only search).",
-      "4. Provider response normalised; only fields returned by the provider are retained, absent fields stay empty.",
-      "5. Defensive exact-date filter applied; differing dates are reported, never silently substituted.",
-      "6. Deterministic validation rules executed and recorded with their evidence basis.",
-      `7. Any tank calculation re-executed by the pinned deterministic engine (${ENGINE_VERSION}) at save time.`,
-      "8. AI, when used, produces commentary on the recorded metadata only. It never supplies or alters a number.",
+      "1. The place was checked and turned into a capped search box. You either entered coordinates or chose an OpenStreetMap result.",
+      "2. The capture date was checked as a real date that is not in the future. It was turned into one full UTC day.",
+      "3. The app sent a public, read-only search to Copernicus.",
+      "4. Only fields returned by Copernicus were saved. Missing fields stay empty.",
+      "5. A date check was applied. Different dates are reported, never swapped in silently.",
+      "6. Fixed rules ran and each result kept a note of where its evidence came from.",
+      `7. Any tank calculation was run again by the fixed engine (${ENGINE_VERSION}) when saved.`,
+      "8. AI, when used, comments on the saved data only. It never supplies or changes a number.",
     ],
   });
 
   sections.push({
-    heading: "9. Observations",
+    heading: "9. What was observed",
     lines: scene
       ? [
           project.dateMatch === "window"
             ? acquiredDate === project.requestedDate
-              ? "Catalogue metadata was returned by the provider within the user-selected nearby-date window; the acquisition date happens to equal the requested date."
-              : "Catalogue metadata was returned by the provider within the user-selected nearby-date window. The acquisition date differs from the requested calendar date and is not presented as an exact-date match; no image was substituted silently."
-            : "Catalogue metadata was returned by the provider for the requested area and exact date.",
-          `Provider-reported cloud cover: ${formatCloudCover(scene.cloudCoverPct)}.`,
-          "No surface feature, tank geometry or liquid level is claimed from this image. The record is metadata-supported observation only.",
+              ? "Copernicus returned image data inside the nearby-date window you chose. The capture date happens to match the date you asked for."
+              : "Copernicus returned image data inside the nearby-date window you chose. The capture date is not the date you asked for. The report flags this and no image was substituted silently."
+            : "Copernicus returned image data for your search box and exact date.",
+          `Cloud cover from Copernicus: ${formatCloudCover(scene.cloudCoverPct)}.`,
+          "The app does not claim a surface feature, tank size or liquid level from this image. This record is saved image data only.",
         ]
       : [
-          "Uploaded image received and validated for format, size and decodability.",
-          "No calibrated observation is claimed from an unverified image.",
+          "The uploaded image passed the format, size and image-opening checks.",
+          "The app does not claim a checked measurement from an unchecked image.",
         ],
   });
 
   sections.push({
-    heading: "10. Calculation formulas and inputs",
+    heading: "10. Tank formulas and inputs",
     lines: calculations.length
       ? calculations.map(
           (calculation) =>
-            `${calculation.geometryLabel}: ${calculation.formula} — entered diameter ${calculation.diameterInput} ${calculation.unit}, entered ${
+            `${calculation.geometryLabel}: ${calculation.formula}. You entered diameter ${calculation.diameterInput} ${calculation.unit} and ${
               calculation.heightM !== null ? "height" : "length"
-            } ${calculation.secondInput} ${calculation.unit}; converted internal diameter ${formatVolume(calculation.diameterM, 4)} m, ${
-              calculation.heightM !== null ? "internal height" : "internal length"
-            } ${formatVolume(calculation.heightM ?? calculation.lengthM ?? 0, 4)} m, radius ${formatVolume(calculation.radiusM, 6)} m (engine ${calculation.engineVersion}).`,
+            } ${calculation.secondInput} ${calculation.unit}. Converted inside diameter: ${formatVolume(calculation.diameterM, 4)} m. Inside ${
+              calculation.heightM !== null ? "height" : "length"
+            }: ${formatVolume(calculation.heightM ?? calculation.lengthM ?? 0, 4)} m. Radius: ${formatVolume(calculation.radiusM, 6)} m. Engine: ${calculation.engineVersion}.`,
         )
       : [
           "No tank calculation is attached to this record.",
-          "Reference formulas: vertical cylinder V = π × r² × H; horizontal cylinder full capacity V = π × r² × L.",
+          "Formulas: upright cylinder V = π × r² × H. Horizontal cylinder full capacity V = π × r² × L.",
         ],
   });
 
@@ -226,18 +226,18 @@ export function buildResearchReport(
     heading: "11. Results and units",
     lines: calculations.length
       ? calculations.flatMap((calculation) => [
-          `${calculation.geometryLabel} theoretical geometric capacity: ${formatVolume(calculation.volume.cubicMeters, 6)} m³ = ${formatVolume(calculation.volume.liters, 3)} L = ${formatVolume(calculation.volume.usGallons, 3)} US gal = ${formatVolume(calculation.volume.oilBarrels, 4)} bbl (oil barrel, 42 US gal).`,
+          `${calculation.geometryLabel} full capacity: ${formatVolume(calculation.volume.cubicMeters, 6)} m³ = ${formatVolume(calculation.volume.liters, 3)} L = ${formatVolume(calculation.volume.usGallons, 3)} US gal = ${formatVolume(calculation.volume.oilBarrels, 4)} bbl (oil barrel, 42 US gal).`,
         ])
-      : ["No numerical result is attached to this record."],
+      : ["No number is attached to this record."],
   });
 
   sections.push({
-    heading: "12. Validation status",
+    heading: "12. Check results",
     lines: [
       `Summary: ${statusLine(project)}`,
       ...project.checks.map(
         (check) =>
-          `[${check.status}] ${check.label} — ${check.detail} (basis: ${check.basis}; rule: ${check.rule})`,
+          `[${check.status}] ${check.label} — ${check.detail} (source: ${check.basis}; rule: ${check.rule})`,
       ),
     ],
   });
@@ -245,35 +245,35 @@ export function buildResearchReport(
   sections.push({
     heading: "13. Uncertainty",
     lines: [
-      "Catalogue metadata uncertainty: cloud cover, footprint and cloud-shadow values are provider-reported tile statistics, not target-specific measurements.",
-      "Capacity arithmetic uncertainty: the calculation is exact for ideal cylinder geometry at IEEE-754 double precision; the physical dimensions are user-supplied and unverified, which dominates any real-world error.",
+      "Image data: cloud cover, outline and cloud-shadow values are Copernicus tile numbers, not measurements of your target.",
+      "Tank capacity: the maths is exact for a perfect cylinder. The sizes came from you and are not checked, and that is the largest source of error.",
       calculations.length
-        ? "No measurement uncertainty is reported for image-derived dimensions, because no image-derived dimension is produced."
-        : "No measurement uncertainty is applicable: no measurement was performed.",
+        ? "No measurement error is given for image-based sizes, because the app does not produce any."
+        : "No measurement error applies, because no measurement was made.",
       "No accuracy percentage is claimed anywhere in this report.",
     ],
   });
 
   sections.push({
-    heading: "14. Limitations",
+    heading: "14. Limits",
     lines: [
-      "Optical satellite imagery observes only the exterior of a tank. Internal liquid level and inventory are not observable.",
-      "Sentinel-2 at 10 m is generally too coarse for accurate small-tank geometry.",
-      "Clouds, shadows and viewing geometry can obscure or distort surface features.",
-      "Georeferencing is provider-declared; no independent ground control points are measured in this app.",
-      "An uploaded file is not an authenticated product; embedded EXIF is editable metadata.",
-      "Theoretical geometric capacity is not nominal capacity, usable capacity or measured inventory.",
+      "Satellite images show only the outside of a tank. They cannot show the internal liquid level or inventory.",
+      "Sentinel-2 at 10 m is too coarse to measure a small tank accurately.",
+      "Cloud, shadow and view angle can hide or distort surface features.",
+      "Map position comes from Copernicus. The app measures no independent ground control points.",
+      "An uploaded file is not a checked product. EXIF inside the file can be edited.",
+      "Full capacity from a formula is not rated capacity, usable capacity or measured inventory.",
     ],
   });
 
   sections.push({
-    heading: "15. References and attribution",
+    heading: "15. Credit and references",
     lines: [
-      scene ? scene.attribution : "No Copernicus data is referenced by this record.",
+      scene ? scene.attribution : "This record does not use Copernicus data.",
       "Copernicus Data Space Ecosystem STAC API: https://documentation.dataspace.copernicus.eu/APIs/STAC.html",
       "Sentinel Data Legal Notice: https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice",
-      "Geocoding: OpenStreetMap Nominatim, data © OpenStreetMap contributors, ODbL 1.0.",
-      "Catalogue metadata is used under the provider's terms; catalogue portal content is not redistributed.",
+      "Place lookup: OpenStreetMap Nominatim, data © OpenStreetMap contributors, ODbL 1.0.",
+      "Copernicus image data is used under its terms. The app does not redistribute Copernicus portal content.",
     ],
   });
 
@@ -281,15 +281,15 @@ export function buildResearchReport(
     heading: "16. Processing timestamp",
     lines: [
       `Report generated: ${generatedAt.toISOString()}`,
-      `Project created: ${new Date(project.createdAt).toISOString()}`,
-      `Project last updated: ${new Date(project.updatedAt).toISOString()}`,
-      `Calculation engine: ${ENGINE_VERSION} (deterministic, independently tested).`,
+      `Record created: ${new Date(project.createdAt).toISOString()}`,
+      `Record last updated: ${new Date(project.updatedAt).toISOString()}`,
+      `Calculation engine: ${ENGINE_VERSION} (fixed rules, independently tested).`,
       calculations.length > 0
         ? `Stored calculation engine version(s): ${[...new Set(calculations.map((calculation) => calculation.engineVersion))].join(", ")}.`
         : "No stored calculation engine version applies to this record.",
-      `AI analysis: ${
+      `AI commentary: ${
         project.analysis
-          ? `${project.analysis.status} using ${project.analysis.model} at ${new Date(project.analysis.ranAt).toISOString()} — commentary only, no numerical authority`
+          ? `${project.analysis.status} using ${project.analysis.model} at ${new Date(project.analysis.ranAt).toISOString()}. Commentary only. It has no authority over numbers.`
           : "not run for this record"
       }`,
     ],
@@ -306,7 +306,7 @@ export function reportToMarkdown(report: ResearchReport): string {
   const parts = [
     `# ${report.title}`,
     "",
-    `_Generated ${report.generatedAt} by Tank Calculator AI. Statuses are reproduced exactly as recorded; unverified estimates are not presented as facts._`,
+    `_Generated ${report.generatedAt} by Tank Calculator AI. Statuses are copied as recorded. Estimates are not shown as facts._`,
     "",
   ];
   for (const section of report.sections) {

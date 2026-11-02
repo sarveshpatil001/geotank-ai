@@ -30,7 +30,7 @@ export const SUPPORTED_COLLECTIONS = [
   {
     id: "sentinel-2-l2a",
     name: "Sentinel-2 Level-2A",
-    note: "Surface reflectance, 10 m / 20 m / 60 m bands. Generally too coarse for individual small-tank geometry.",
+    note: "10 m, 20 m and 60 m pixels. Usually too coarse to measure a small tank.",
   },
 ] as const;
 
@@ -117,7 +117,7 @@ export function validateCaptureDate(
     return {
       ok: false,
       code: "FORMAT",
-      message: "Use the format YYYY-MM-DD, for example 2024-06-28.",
+      message: "Use the date format YYYY-MM-DD, for example 2024-06-28.",
     };
   }
   const [year, month, day] = trimmed.split("-").map(Number);
@@ -131,7 +131,7 @@ export function validateCaptureDate(
     return {
       ok: false,
       code: "INVALID_DATE",
-      message: "That calendar date does not exist.",
+      message: "That date does not exist.",
     };
   }
   const todayUtc = Date.UTC(
@@ -144,7 +144,7 @@ export function validateCaptureDate(
       ok: false,
       code: "FUTURE_DATE",
       message:
-        "A capture date in the future cannot have acquired imagery. Choose today or earlier.",
+        "The capture date cannot be in the future. Choose today or earlier.",
     };
   }
   const firstSupported = Date.UTC(2015, 5, 23);
@@ -152,7 +152,7 @@ export function validateCaptureDate(
     return {
       ok: false,
       code: "BEFORE_SUPPORTED",
-      message: `Sentinel-2 imagery is not available before ${SENTINEL2_FIRST_CAPTURE_DATE}. Choose a later capture date.`,
+      message: `Sentinel-2 has no images before ${SENTINEL2_FIRST_CAPTURE_DATE}. Choose a later date.`,
     };
   }
   return { ok: true, date: trimmed };
@@ -288,23 +288,23 @@ export function validateBbox(
   maxSpanDegrees: number = MAX_BBOX_SPAN_DEGREES,
 ): BboxResult {
   if (!Array.isArray(bbox) || bbox.length !== 4) {
-    return { ok: false, message: "A bounding box needs four numbers." };
+    return { ok: false, message: "A search box needs four numbers." };
   }
   if (bbox.some((value) => !Number.isFinite(value))) {
-    return { ok: false, message: "Bounding box values must be finite numbers." };
+    return { ok: false, message: "Every search box value must be a normal number." };
   }
   const [west, south, east, north] = bbox;
   if (west < -180 || east > 180 || south < -90 || north > 90) {
     return {
       ok: false,
-      message: "Bounding box coordinates are outside the valid longitude/latitude range.",
+      message: "A search box coordinate is outside the valid latitude or longitude range.",
     };
   }
   if (west >= east || south >= north) {
     return {
       ok: false,
       message:
-        "Bounding box must be ordered west < east and south < north. Antimeridian-crossing boxes are not supported.",
+        "The search box must run west to east and south to north. The app does not support boxes that cross the date line.",
     };
   }
 
@@ -713,9 +713,9 @@ export function classifyCatalogueFailure(input: {
       status: "error",
       kind: "auth",
       httpStatus: status,
-      title: "Catalogue authentication problem",
+      title: "Copernicus sign-in problem",
       detail:
-        "The catalogue rejected the request with an authentication or authorisation response. Search for this provider is expected to be anonymous; this may be a provider-side change.",
+        "Copernicus rejected the search. This search should not need a login, so Copernicus may have changed something.",
     };
   }
   if (status === 429) {
@@ -723,9 +723,9 @@ export function classifyCatalogueFailure(input: {
       status: "error",
       kind: "rate_limited",
       httpStatus: status,
-      title: "Catalogue rate limit reached",
+      title: "Copernicus is busy",
       detail:
-        "Copernicus asked us to slow down. Wait a moment and retry; no results were hidden.",
+        "Copernicus asked the app to slow down. Wait a moment and try again. No results were hidden.",
     };
   }
   if (status === 400 || status === 422) {
@@ -733,9 +733,9 @@ export function classifyCatalogueFailure(input: {
       status: "error",
       kind: "invalid_query",
       httpStatus: status,
-      title: "Catalogue rejected the query",
+      title: "Copernicus rejected the search",
       detail:
-        "The catalogue considered the search parameters invalid. Adjust the area or date and retry.",
+        "Copernicus did not accept the place or date. Change them and try again.",
     };
   }
   if (typeof status === "number" && status >= 500) {
@@ -743,9 +743,9 @@ export function classifyCatalogueFailure(input: {
       status: "error",
       kind: "upstream",
       httpStatus: status,
-      title: "Catalogue server error",
+      title: "Copernicus server error",
       detail:
-        "Copernicus returned a server error. This is not an empty result: the search did not complete.",
+        "Copernicus returned an error. This is not an empty result. The search did not finish.",
     };
   }
   if (
@@ -756,36 +756,36 @@ export function classifyCatalogueFailure(input: {
     return {
       status: "error",
       kind: "timeout",
-      title: "Catalogue request timed out",
+      title: "Copernicus took too long",
       detail:
-        "The catalogue did not answer within the request budget. No imagery metadata was retrieved.",
+        "Copernicus did not answer in time. No image data was received.",
     };
   }
   if (name === "SyntaxError") {
     return {
       status: "error",
       kind: "malformed",
-      title: "Unreadable catalogue response",
+      title: "Copernicus sent an unreadable reply",
       detail:
-        "The catalogue response was not valid STAC JSON. Nothing from it has been used.",
+        "The reply was not valid STAC data. Nothing from it was used.",
     };
   }
   if (name === "TypeError") {
     return {
       status: "error",
       kind: "network",
-      title: "Could not reach the catalogue",
+      title: "Could not reach Copernicus",
       detail:
-        "A network-level failure prevented the request from completing. Check connectivity and retry.",
+        "A network problem stopped the request. Check your connection and try again.",
     };
   }
   return {
     status: "error",
     kind: "unknown",
-    title: "Catalogue search failed",
+    title: "Image search failed",
     detail:
       message.trim() ||
-      "The search did not complete and produced no usable catalogue metadata.",
+      "The search did not finish and returned no usable data.",
   };
 }
 

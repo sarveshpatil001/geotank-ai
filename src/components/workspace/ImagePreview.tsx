@@ -53,8 +53,8 @@ export function ImagePreview({
             )}
             <p className="max-w-xs text-xs leading-5 text-mist">
               {src
-                ? "The preview could not be loaded. The metadata record is unaffected; no substitute image is shown."
-                : "No preview asset exists for this record. No image is fabricated."}
+                ? "The preview could not load. The record is still intact. No other image is shown."
+                : "There is no preview for this record. The app does not make one up."}
             </p>
           </div>
         )}

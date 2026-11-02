@@ -33,6 +33,25 @@ import {
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
+function countLabel(count: number, one: string, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  "imagery.search": "Image search",
+  "imagery.search_failed": "Image search failed",
+  "analysis.completed": "AI commentary saved",
+  "analysis.failed": "AI commentary failed",
+  "analysis.malformed": "AI reply rejected",
+  "analysis.rejected": "AI reply blocked",
+  "analysis.cleared": "AI commentary cleared",
+  "calculation.saved": "Calculation saved",
+  "calculation.deleted": "Calculation deleted",
+  "project.created": "Record created",
+  "project.upload_created": "Upload record created",
+  "project.deleted": "Record deleted",
+};
+
 type HealthResult = FunctionReturnType<typeof api.imagery.health>;
 type AiStatus = FunctionReturnType<typeof api.aiStatus.status>;
 type ExportPage = FunctionReturnType<typeof api.settings.exportData>;
@@ -41,46 +60,46 @@ type ExportCalculation = ExportPage["calculations"][number];
 
 const LIMITATIONS: { label: string; status: string; detail: string }[] = [
   {
-    label: "Catalogue search",
+    label: "Image library search",
     status: "VERIFIED",
     detail:
-      "Anonymous CDSE STAC POST search was executed live during development and returned real Sentinel-2 L2A items. Empty, timeout, auth, rate-limit and upstream states are handled separately.",
+      "A live Copernicus search returned real Sentinel-2 L2A images. The app tells an empty result apart from a timeout, login problem, rate limit or server error.",
   },
   {
-    label: "Deterministic tank engine",
+    label: "Tank calculation engine",
     status: "TESTED",
     detail:
-      "40 deterministic engine checks cover reference volumes, unit invariance, non-finite inputs, range limits, rounding, catalogue normalisation, validation rules, EXIF parsing, URL safety and report sections. A separate 31-test Convex suite covers auth, limits, uploads, pagination, deletion and AI guards.",
+      "40 fixed checks cover known volumes, unit changes, bad inputs, size limits, rounding, image data, check rules, camera data, URL safety and report sections. A separate 31-test Convex suite covers sign-in, limits, uploads, paging, deletion and AI guards.",
   },
   {
-    label: "Image upload pipeline",
+    label: "Image uploads",
     status: "IMPLEMENTED",
     detail:
-      "The browser prepares a preview and heuristic quality statistics. The server re-reads the stored blob, verifies size, magic bytes, header dimensions, EXIF and SHA-256, then finalises it into a record. The server round-trip is verified live; the browser UI has not been visually exercised in this session.",
+      "The browser makes a preview and basic image statistics. The server reads the saved file again and checks its size, type, image size, camera data and file fingerprint before saving. The server flow passed live checks. The browser screen has not been checked visually in this session.",
   },
   {
     label: "AI commentary",
     status: "IMPLEMENTED",
     detail:
-      "The adapter is wired to the deployment's integration gateway and rejects unstructured or unsafe output (numeric measurements, affirmative liquid-level claims). Availability is a query; runs have per-user limits and a 60 s per-project cooldown. Output is never authoritative.",
+      "The AI service is connected to the deployment's gateway. It rejects output with the wrong shape or unsafe claims such as numbers, fill levels or inventory. The app asks the server if AI is ready. Runs have user limits and a 60-second gap per record. AI text is never treated as evidence.",
   },
   {
     label: "Research report",
     status: "IMPLEMENTED",
     detail:
-      "Generated deterministically from stored records. Section completeness is covered by the test script; the browser print layout has not been independently verified.",
+      "Built from saved records by fixed code. Tests cover the sections. The browser print layout has not been checked separately.",
   },
   {
     label: "Partial-fill volume",
     status: "NOT IMPLEMENTED",
     detail:
-      "Deliberately out of scope until the segment geometry, liquid-level reference and reference values are validated.",
+      "Not offered until the formula, zero level and reference values are checked.",
   },
   {
-    label: "Image-derived tank dimensions",
+    label: "Tank sizes from images",
     status: "NOT MEASURABLE",
     detail:
-      "10 m Sentinel-2 pixels cannot resolve individual small-tank geometry to engineering tolerance, and no ground control points are measured.",
+      "10 m Sentinel-2 pixels cannot measure a small tank to engineering accuracy. No ground control points are measured.",
   },
 ];
 
@@ -221,7 +240,7 @@ export default function SettingsPage() {
   const deletionBusy = deleting && !deletionFinished;
   const deletionMessage =
     deletionJob?.status === "complete"
-      ? `Deleted ${deletionJob.projectsDeleted} research record(s), ${deletionJob.imagesDeleted} stored image(s), ${deletionJob.calculationsDeleted} calculation(s) and ${deletionJob.auditLogsDeleted} activity entr${deletionJob.auditLogsDeleted === 1 ? "y" : "ies"}.`
+      ? `Deleted ${countLabel(deletionJob.projectsDeleted, "research record")}, ${countLabel(deletionJob.imagesDeleted, "stored image")}, ${countLabel(deletionJob.calculationsDeleted, "calculation")} and ${countLabel(deletionJob.auditLogsDeleted, "activity entry", "activity entries")}.`
       : null;
 
   const handleDeleteAll = async () => {
@@ -247,8 +266,8 @@ export default function SettingsPage() {
           Account, data and system status
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-mist">
-          Every indicator on this page reflects a real query, a real stored
-          setting or a live request. Nothing here is a decorative health badge.
+          Every status here comes from a real query, a saved setting or a live
+          request. None of it is decorative.
         </p>
       </div>
 
@@ -259,16 +278,16 @@ export default function SettingsPage() {
             <Field label="Email" value={user?.email ?? "Not provided"} />
             <Field label="Display name" value={user?.name ?? "Not provided"} />
             <Field
-              label="Account id"
+              label="Account ID"
               value={user?._id ? `${user._id.slice(0, 12)}…` : "unavailable"}
               mono
             />
             <Field
-              label="Authentication"
+              label="Sign-in method"
               value={
                 user?.isAnonymous
-                  ? "Anonymous guest session"
-                  : "Email one-time passcode"
+                  ? "Guest session"
+                  : "Email one-time code"
               }
             />
           </dl>
@@ -284,28 +303,28 @@ export default function SettingsPage() {
             <LogOut className="size-4" /> Sign out
           </Button>
           <p className="text-[11px] leading-5 text-mist">
-            Research records and uploads are scoped to this account. Queries and
-            mutations verify ownership on the server; the UI is not the access
-            control.
+            Your records and uploads belong to this account. The server checks
+            ownership on every read and write. The screen is not the security
+            layer.
           </p>
         </Panel>
 
         <Panel className="space-y-4">
           <SectionHeading
-            eyebrow="AI & privacy"
-            title="Model commentary consent"
-            description="AI is optional. It never receives image pixels, exact coordinates or credentials."
+            eyebrow="AI and privacy"
+            title="AI commentary consent"
+            description="AI is optional. It never sees image pixels, exact coordinates or keys."
           />
           <div className="flex items-start justify-between gap-4 rounded-xl border border-edge/60 bg-abyss/50 p-4">
             <div>
               <Label htmlFor="ai-toggle" className="text-sm text-ink">
-                Allow AI commentary
+Allow AI commentary
               </Label>
               <p className="mt-1.5 text-[11px] leading-5 text-mist">
-                When enabled, pressing “Run AI interpretation” sends the
-                record&apos;s metadata text (location label, dates, provider
-                identifiers, validation statuses) to the deployment&apos;s AI
-                gateway. It does not send the image or exact coordinates.
+                When this is on, pressing “Run AI commentary” sends text about
+                the record to the deployment&apos;s AI service. That text includes
+                the place label, dates, Copernicus IDs and check results. It does
+                not include the image or exact coordinates.
               </p>
             </div>
             <Switch
@@ -321,7 +340,7 @@ export default function SettingsPage() {
           <div className="rounded-xl border border-edge/60 bg-abyss/50 p-4">
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2 text-xs text-ink">
-                <BrainCircuit className="size-4 text-mint" /> Adapter
+                <BrainCircuit className="size-4 text-mint" /> Service
               </span>
               <span
                 className={cn(
@@ -331,8 +350,8 @@ export default function SettingsPage() {
               >
                 {aiInfo
                   ? aiInfo.configured
-                    ? "configured"
-                    : "not configured"
+                    ? "ready"
+                    : "not set up"
                   : "checking"}
               </span>
             </div>
@@ -342,17 +361,16 @@ export default function SettingsPage() {
               model · {aiInfo?.model ?? "unknown"}
             </p>
             <p className="mt-2 text-[11px] leading-4 text-mist">
-              {aiInfo?.note ?? "Reading adapter status…"}
+              {aiInfo?.note ?? "Reading AI status…"}
             </p>
           </div>
         </Panel>
       </div>
 
       <Panel className="space-y-4">
-        <SectionHeading
-          eyebrow="Live checks"
+        <SectionHeading            eyebrow="Live check"
           title="System status"
-          description="This button performs a real network request. A failure is displayed as a failure."
+          description="This button makes a real network request. If it fails, you see the failure."
           actions={
             <Button
               type="button"
@@ -365,18 +383,18 @@ export default function SettingsPage() {
               ) : (
                 <Wifi className="size-4" />
               )}
-              Check catalogue
+Check Copernicus
             </Button>
           }
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile
-            label="catalogue endpoint"
+            label="image library"
             value={
               health
                 ? health.reachable
                   ? "reachable"
-                  : "unreachable"
+                  : "not reachable"
                 : "not checked"
             }
             hint="stac.dataspace.copernicus.eu"
@@ -384,9 +402,9 @@ export default function SettingsPage() {
           />
           <StatTile label="HTTP status" value={health?.httpStatus ?? "—"} hint="last check" />
           <StatTile
-            label="latency"
+            label="response time"
             value={health ? `${health.latencyMs} ms` : "—"}
-            hint="client-measured round trip"
+            hint="measured by this browser"
           />
           <StatTile
             label="last checked"
@@ -399,7 +417,7 @@ export default function SettingsPage() {
         {health && !health.reachable && (
           <p className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs leading-5 text-danger">
             {health.error ??
-              `The catalogue answered HTTP ${health.httpStatus}. It is not currently usable for searches.`}
+              `Copernicus answered HTTP ${health.httpStatus}. Searches will not work right now.`}
           </p>
         )}
         {healthError && (
@@ -408,8 +426,8 @@ export default function SettingsPage() {
           </p>
         )}
         <p className="text-[11px] leading-5 text-mist">
-          A reachable catalogue is necessary but not sufficient for a useful
-          result: imagery does not exist for every place on every date.
+          A reachable service is needed, but it does not mean images exist for
+          every place and date.
         </p>
       </Panel>
 
@@ -417,8 +435,8 @@ export default function SettingsPage() {
         <Panel className="space-y-4">
           <SectionHeading
             eyebrow="Your data"
-            title="Export and deletion"
-            description="Deletion removes records, stored images and saved calculations for this account."
+            title="Export and delete"
+            description="Deletion removes this account's records, stored images and saved calculations."
           />
           <div className="flex flex-wrap gap-2">
             <Button
@@ -456,19 +474,19 @@ export default function SettingsPage() {
           )}
           {deletionJob?.status === "running" && (
             <p className="rounded-lg border border-warn/30 bg-warn/[0.05] px-3 py-2 text-xs leading-5 text-warn">
-              Deletion in progress: {deletionJob.projectsDeleted} record(s),{" "}
-              {deletionJob.calculationsDeleted} calculation(s) and{" "}
-              {deletionJob.imagesDeleted} image(s) removed so far. The counts
-              only include committed deletions.
+              Deleting… {countLabel(deletionJob.projectsDeleted, "record")},{" "}
+              {countLabel(deletionJob.calculationsDeleted, "calculation")} and{" "}
+              {countLabel(deletionJob.imagesDeleted, "image")} removed so far.
+              Only finished deletions are counted.
             </p>
           )}
           {confirmDelete && !deletionFinished && (
             <div className="rounded-xl border border-danger/40 bg-danger/[0.05] p-4">
               <p className="text-sm font-medium text-ink">
-                Permanently delete everything for this account?
+                Delete everything in this account?
               </p>
               <p className="mt-1 text-[11px] leading-5 text-mist">
-                This includes every research record, uploaded image, calculation,
+                This removes every research record, uploaded image, calculation,
                 setting and activity entry. It cannot be undone.
               </p>
               {deleteError && <p className="mt-2 text-xs text-danger">{deleteError}</p>}
@@ -494,23 +512,22 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-          <Callout tone="info" icon={KeyRound} title="Credentials">
-            The AI integration key and any optional catalogue token are read from
-            server-side environment variables. No credential is bundled into the
-            browser code, and none is written to a research record.
+          <Callout tone="info" icon={KeyRound} title="Keys">
+            The AI key and any optional Copernicus token are read on the server.
+            No key is in browser code, and no key is written to a record.
           </Callout>
         </Panel>
 
         <Panel className="space-y-3">
           <SectionHeading
-            eyebrow="Audit"
+            eyebrow="Activity"
             title="Recent activity"
-            description="Actions recorded for this account. Query text and image pixels are not logged."
+            description="Actions for this account. Search text and image pixels are not logged."
           />
           {activity === undefined ? (
             <InlineSpinner label="Loading activity…" />
           ) : activity.length === 0 ? (
-            <p className="text-xs leading-5 text-mist">No activity recorded yet.</p>
+            <p className="text-xs leading-5 text-mist">No activity yet.</p>
           ) : (
             <ul className="space-y-2">
               {activity.map((entry) => (
@@ -520,7 +537,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-mint">
-                      {entry.action}
+                      {ACTIVITY_LABELS[entry.action] ?? entry.action}
                     </span>
                     <span className="font-mono text-[10px] text-mist/60">
                       {new Date(entry.at).toISOString().slice(5, 16).replace("T", " ")}
@@ -536,9 +553,9 @@ export default function SettingsPage() {
 
       <Panel className="space-y-4">
         <SectionHeading
-          eyebrow="Engineering honesty"
-          title="Verification ledger and known limitations"
-          description="Statuses describe evidence collected during development, not marketing readiness."
+          eyebrow="Build status"
+          title="What is checked and what is limited"
+          description="These labels describe evidence from development. They are not a claim that the app is ready for every use."
         />
         <ul className="grid gap-2.5 lg:grid-cols-2">
           {LIMITATIONS.map((item) => (
@@ -573,7 +590,7 @@ export default function SettingsPage() {
             </p>
             <p className="mt-1.5 text-[11px] leading-4 text-mist">
               Convex database and protected file storage in this deployment.
-              Uploads are deleted with their record.
+              Images are deleted with their record.
             </p>
           </div>
           <div className="rounded-xl border border-edge/60 bg-abyss/40 p-3.5">
@@ -581,27 +598,27 @@ export default function SettingsPage() {
               <Activity className="size-3.5" /> cost
             </p>
             <p className="mt-1.5 text-[11px] leading-4 text-mist">
-              Catalogue metadata and Sentinel data are free and open. Geocoding
-              uses the public Nominatim service at low volume with caching. AI
-              calls bill to the deployment&apos;s integration account.
+              Copernicus image data and Sentinel data are free and open. Place
+              lookup uses the public Nominatim service at low volume with
+              caching. AI calls are billed to the deployment&apos;s AI account.
             </p>
           </div>
           <div className="rounded-xl border border-edge/60 bg-abyss/40 p-3.5">
             <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-mint">
-              <ShieldAlert className="size-3.5" /> scope
+              <ShieldAlert className="size-3.5" /> limits
             </p>
             <p className="mt-1.5 text-[11px] leading-4 text-mist">
-              Public educational research only. Not facility surveillance, not
-              stock monitoring, and never a claim of measured inventory.
+              For public educational research only. Not for watching facilities,
+              tracking stock or claiming measured inventory.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t border-edge/50 pt-3 text-[11px] text-mist">
           <CheckCircle2 className="size-3.5 text-emerald" />
-          Mathematical correctness before AI confidence.
+          Maths first, AI confidence second.
           <span className="text-mist/40">·</span>
           <AlertTriangle className="size-3.5 text-warn" />
-          Unverified features are labelled above, not hidden.
+          Unchecked features are labelled above, not hidden.
         </div>
       </Panel>
     </div>

@@ -32,82 +32,82 @@ const TRUST = [
   {
     icon: Satellite,
     label: "Copernicus Sentinel-2 L2A",
-    detail: "live CDSE STAC metadata",
+    detail: "live image data",
   },
-  { icon: Ruler, label: "10 m / pixel", detail: "provider-declared resolution" },
-  { icon: Calculator, label: "tank-math/1.0.0", detail: "32 reference checks run" },
-  { icon: BrainCircuit, label: "AI advisory only", detail: "no numerical authority" },
+  { icon: Ruler, label: "10 m / pixel", detail: "detail set by Copernicus" },
+  { icon: Calculator, label: "tank-math/1.0.0", detail: "40 checks in the test suite" },
+  { icon: BrainCircuit, label: "AI is optional", detail: "it cannot do the maths" },
 ];
 
 const METHOD = [
   {
     icon: MapPin,
-    title: "Resolve the area",
-    copy: "Coordinates are parsed locally; place names go through OpenStreetMap Nominatim. You choose the candidate, and the search box is capped instead of silently expanded.",
-    meta: "WGS 84 · bbox ≤ 0.6°",
+    title: "Find the area",
+    copy: "Enter a place name or coordinates. You pick the right match. The search area is capped at 0.6°.",
+    meta: "global coordinates · area ≤ 0.6°",
   },
   {
     icon: CalendarClock,
-    title: "Fix the acquisition date",
-    copy: "A real, non-future calendar date becomes a closed UTC day interval. Acquisition, processing and ingestion timestamps stay distinct in every record.",
-    meta: "UTC 00:00:00 – 23:59:59",
+    title: "Set the capture date",
+    copy: "Pick the day the image was taken. The app uses the whole UTC day. Capture, processing and upload times stay separate.",
+    meta: "UTC 00:00 – 23:59",
   },
   {
     icon: Radar,
-    title: "Query the catalogue",
-    copy: "A read-only STAC request goes to the Copernicus Data Space Ecosystem. Empty results, timeouts, rate limits and server errors are reported as different states.",
-    meta: "stac.dataspace.copernicus.eu/v1",
+    title: "Search the image library",
+    copy: "The app sends a read-only request to Copernicus. No results, timeouts and errors are shown as different outcomes.",
+    meta: "Copernicus image service",
   },
   {
     icon: ShieldCheck,
-    title: "Validate, calculate, report",
-    copy: "Deterministic rules label every claim. The cylinder engine computes capacity from your internal dimensions; a report assembles the record without upgrading any status.",
+    title: "Check, calculate, report",
+    copy: "Fixed rules mark every claim. The calculator uses your inside sizes. The report keeps every status as recorded.",
     meta: "V = π r² H / V = π r² L",
   },
 ];
 
 const LEDGER = [
   {
-    label: "Catalogue search",
+    label: "Image library search",
     status: "VERIFIED",
-    copy: "Live anonymous CDSE search returned real Sentinel-2 items during development; failure states are distinguished from empty results.",
+    copy: "A live Copernicus search returned real Sentinel-2 images during development. An empty result is shown apart from a failed request.",
   },
   {
-    label: "Deterministic tank engine",
+    label: "Tank calculation engine",
     status: "TESTED",
-    copy: "Reference volumes, unit invariance, non-finite inputs, invalid dimensions and presentation rounding are covered by the repository test script.",
+    copy: "Tests cover known volumes, unit changes, bad inputs, size limits and rounding.",
   },
   {
-    label: "Scientific validation",
+    label: "Record checks",
     status: "TESTED",
-    copy: "Cloud thresholds, date disagreement, upload provenance and the liquid-level rules are asserted in automated checks.",
+    copy: "Tests cover cloud limits, date mismatches, upload source and liquid-level limits.",
   },
   {
     label: "Image uploads",
     status: "IMPLEMENTED",
-    copy: "Signature, size, decode and EXIF checks run before upload; storage metadata is re-verified server-side. Browser round-trip not yet verified.",
+    copy: "The browser checks the file. The server checks it again. The full browser upload flow has not been checked visually.",
   },
   {
     label: "AI commentary",
     status: "IMPLEMENTED",
-    copy: "Metadata-only prompt, structured output validation and separate storage. Requires a runtime integration key; never authoritative.",
+    copy: "The prompt gets text data only. Output is checked before storage. It is never treated as fact.",
   },
   {
     label: "Research report",
     status: "IMPLEMENTED",
-    copy: "Deterministic Markdown/PDF-ready report with statuses reproduced exactly as recorded. No accuracy percentage is ever invented.",
+    copy: "A fixed report uses the saved statuses. It never invents an accuracy score.",
   },
 ];
 
 const APP_AT = [
-  "Research request with location and capture date",
-  "Provider selection with real metadata and quicklook",
-  "Image viewer, footprint diagram and asset inventory",
-  "AI commentary kept separate from evidence",
-  "Rule-by-rule validation ledger",
-  "Deterministic tank calculator with unit handling",
-  "Downloadable report and project history",
-  "Privacy controls: export, deletion, audit trail",
+  "Search by place and capture date",
+  "See Copernicus image data and a preview",
+  "View the image, map outline and file list",
+  "Read AI notes apart from the evidence",
+  "See every check and its result",
+  "Calculate tank capacity with unit conversion",
+  "Download a report and review past records",
+  "Export or delete your data, with an activity log",
 ];
 
 export default function Landing() {
@@ -134,19 +134,19 @@ export default function Landing() {
               href="#method"
               className="text-xs text-mist transition hover:text-ink"
             >
-              Method
+              How it works
             </a>
             <a
               href="#boundaries"
               className="text-xs text-mist transition hover:text-ink"
             >
-              Boundaries
+              Limits
             </a>
             <a
               href="#ledger"
               className="text-xs text-mist transition hover:text-ink"
             >
-              Status ledger
+              Build status
             </a>
             <a
               href="https://documentation.dataspace.copernicus.eu/APIs/STAC.html"
@@ -154,7 +154,7 @@ export default function Landing() {
               rel="noreferrer"
               className="flex items-center gap-1 text-xs text-mist transition hover:text-ink"
             >
-              Provider docs <ExternalLink className="size-3" />
+              Copernicus docs <ExternalLink className="size-3" />
             </a>
           </nav>
           <Button
@@ -179,24 +179,23 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 rounded-full border border-edge/80 bg-abyss/60 px-3 py-1.5">
               <span className="size-1.5 rounded-full bg-emerald" />
               <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-mint">
-                Geospatial research workspace · v1
+                Satellite research workspace · v1
               </span>
             </div>
 
             <h1 className="mt-6 font-display text-[2.6rem] font-medium leading-[1.02] tracking-tight text-ink text-balance sm:text-6xl">
               Satellite evidence.
               <br />
-              Deterministic maths.
+              Fixed maths.
               <br />
-              <span className="text-emerald">Stated limits.</span>
+              <span className="text-emerald">Clear limits.</span>
             </h1>
 
             <p className="mt-6 max-w-xl text-sm leading-7 text-mist sm:text-base">
-              Search real Copernicus Sentinel-2 acquisitions for a place and a
-              capture date, record exactly what the provider returned, and compute
-              ideal-cylinder capacity with a tested engine. Tank Calculator AI is
-              built to preserve the distinction between what was observed, what
-              was calculated and what remains unverifiable.
+              Search real Copernicus Sentinel-2 images for a place and a date.
+              See exactly what Copernicus returned. Then calculate ideal tank
+              capacity with a tested formula. The app keeps what was seen, what
+              was calculated and what cannot be known in separate boxes.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -205,7 +204,7 @@ export default function Landing() {
                 className="h-12 gap-2 bg-emerald px-5 font-semibold text-[#04130f] hover:bg-emerald/90"
               >
                 <Link to="/auth?returnTo=/workspace">
-                  Start a research request <ArrowRight className="size-4" />
+                  Start a search <ArrowRight className="size-4" />
                 </Link>
               </Button>
               <Button
@@ -214,14 +213,14 @@ export default function Landing() {
                 className="h-12 gap-2 border-edge bg-transparent px-5 text-ink hover:bg-deepgreen/40"
               >
                 <Link to="/auth?returnTo=/workspace/calculator">
-                  <Calculator className="size-4" /> Open the calculator
+                  <Calculator className="size-4" /> Open calculator
                 </Link>
               </Button>
             </div>
 
             <p className="mt-4 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-mist/60">
               <Lock className="size-3" />
-              free and open data sources · AI commentary optional
+              free and open data · AI is optional
             </p>
           </motion.div>
 
@@ -232,9 +231,9 @@ export default function Landing() {
             className="panel relative overflow-hidden p-5 glow-emerald sm:p-6"
           >
             <div className="flex items-center justify-between gap-2">
-              <p className="eyebrow">Request → evidence</p>
+              <p className="eyebrow">Request → record</p>
               <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-mist/60">
-                workflow map
+                how it works
               </span>
             </div>
 
@@ -304,10 +303,10 @@ export default function Landing() {
               <div className="relative flex min-h-[250px] flex-col justify-end">
                 <ol className="space-y-2.5">
                   {[
-                    ["01", "Resolve area", "place or coordinates"],
-                    ["02", "Capture date", "closed UTC day"],
-                    ["03", "Catalogue query", "CDSE STAC · read only"],
-                    ["04", "Validate & report", "statuses stay attached"],
+                    ["01", "Find area", "place or coordinates"],
+                    ["02", "Capture date", "whole UTC day"],
+                    ["03", "Search images", "Copernicus · read only"],
+                    ["04", "Check & report", "statuses stay attached"],
                   ].map(([index, title, meta]) => (
                     <li
                       key={index}
@@ -330,10 +329,10 @@ export default function Landing() {
 
             <div className="mt-4 flex items-center justify-between gap-2 border-t border-edge/50 pt-3">
               <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-mist/60">
-                provider · copernicus dataspace
+                source · Copernicus
               </span>
               <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-mint">
-                <ShieldCheck className="size-3" /> validation attached
+                <ShieldCheck className="size-3" /> checks attached
               </span>
             </div>
           </motion.div>
@@ -363,14 +362,13 @@ export default function Landing() {
           className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-16 sm:px-6 lg:px-8 lg:py-20"
         >
           <div className="max-w-2xl">
-            <p className="eyebrow">The method</p>
+            <p className="eyebrow">How it works</p>
             <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-ink sm:text-4xl">
-              Four steps, each with a verifiable record.
+              Four steps. Every one leaves a record.
             </h2>
             <p className="mt-4 text-sm leading-7 text-mist">
-              The workflow needs two inputs. Optional filters are labelled as
-              optional, and every additional request explains what it is used for.
-              Nothing is substituted behind your back.
+              You only need two inputs. Optional filters are marked. Every extra
+              request says what it is for. Nothing changes behind your back.
             </p>
           </div>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -407,29 +405,29 @@ export default function Landing() {
           <div className="absolute inset-0 geo-rings opacity-60" aria-hidden="true" />
           <div className="relative mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_0.9fr] lg:px-8 lg:py-20">
             <div>
-              <p className="eyebrow">Scientific boundaries</p>
+              <p className="eyebrow">What the app will not claim</p>
               <h2 className="mt-3 max-w-lg font-display text-3xl font-medium tracking-tight text-ink sm:text-4xl">
-                What this application refuses to say.
+                Some things this app refuses to say.
               </h2>
               <p className="mt-4 max-w-lg text-sm leading-7 text-mist">
-                A visible tank roof is not a liquid level. A cylinder formula is
-                not an inventory measurement. A 10 m pixel is not a survey. Those
-                are hard rules in the code, not disclaimers added at the end.
+                A visible tank roof does not show the liquid level. A formula
+                does not measure inventory. A 10 m pixel is not a survey. These
+                are hard rules in the code, not small print.
               </p>
 
               <div className="mt-8 space-y-3">
                 {[
                   {
-                    title: "Internal liquid level",
-                    copy: "Optical imagery observes the outside of a tank. The app reports this check as NOT MEASURABLE and will not estimate a fill height.",
+                    title: "Liquid level inside a tank",
+                    copy: "Satellite images show the outside of a tank. The app marks this as NOT MEASURABLE and will not estimate a fill height.",
                   },
                   {
                     title: "Liquid inventory",
-                    copy: "Inventory needs authorised measurements, calibration tables, temperature and product data. It is outside scope and never inferred from an image.",
+                    copy: "Inventory needs approved measurements, tank tables, temperature and product data. This app does not estimate it.",
                   },
                   {
-                    title: "Small-tank geometry from Sentinel-2",
-                    copy: "At 10 m per pixel, a 20–40 m tank spans two to four pixels. Individual geometry cannot be resolved to engineering tolerance.",
+                    title: "Small tank sizes from Sentinel-2",
+                    copy: "At 10 m per pixel, a 20–40 m tank is only 2–4 pixels wide. The app cannot measure it to engineering accuracy.",
                   },
                 ].map((item) => (
                   <div
@@ -450,13 +448,13 @@ export default function Landing() {
               <div className="panel-flat p-5">
                 <div className="flex items-center gap-2">
                   <Calculator className="size-4 text-emerald" />
-                  <p className="eyebrow">Deterministic core</p>
+                  <p className="eyebrow">Fixed maths</p>
                 </div>
                 <div className="mt-4 space-y-4">
                   <div>
                     <p className="font-mono text-xs text-mint">V = π × r² × H</p>
                     <p className="mt-1 text-[11px] text-mist">
-                      Vertical cylinder · internal radius and cylindrical height
+                      Upright cylinder · uses inside radius and inside height
                     </p>
                   </div>
                   <div className="border-t border-edge/50 pt-3">
@@ -469,9 +467,8 @@ export default function Landing() {
                 <div className="mt-5 flex items-start gap-2 rounded-lg border border-edge/60 bg-navy/50 p-3">
                   <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald" />
                   <p className="text-[11px] leading-4 text-mist">
-                    Units are explicit, inputs are range-checked, intermediate
-                    values are never rounded and the saved record is recomputed
-                    server-side.
+                    Units are clear. Inputs are range-checked. Values are not
+                    rounded midway. The server recomputes the saved result.
                   </p>
                 </div>
               </div>
@@ -482,7 +479,7 @@ export default function Landing() {
                     capacity
                   </p>
                   <p className="mt-1.5 text-xs leading-5 text-ink">
-                    A geometric quantity, exact for the ideal cylinder.
+                    A geometric volume. Exact for a perfect cylinder.
                   </p>
                 </div>
                 <div className="rounded-xl border border-edge/60 bg-abyss/60 p-4">
@@ -490,7 +487,7 @@ export default function Landing() {
                     inventory
                   </p>
                   <p className="mt-1.5 text-xs leading-5 text-ink">
-                    A physical measurement this tool does not perform.
+                    A physical measurement. This tool does not make it.
                   </p>
                 </div>
               </div>
@@ -505,17 +502,17 @@ export default function Landing() {
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="max-w-2xl">
-              <p className="eyebrow">Status ledger</p>
+              <p className="eyebrow">Build status</p>
               <h2 className="mt-3 font-display text-3xl font-medium tracking-tight text-ink sm:text-4xl">
-                Implemented, tested, verified — kept apart.
+                Built, tested and checked — kept separate.
               </h2>
               <p className="mt-4 text-sm leading-7 text-mist">
-                These statuses describe evidence collected during development.
-                They are also visible inside the app, next to the limitations.
+                These labels describe evidence gathered during development. The
+                app also shows them beside its limits.
               </p>
             </div>
             <span className="rounded-full border border-edge bg-abyss/60 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-mist">
-              v1 · single researcher
+v1 · one researcher
             </span>
           </div>
 
@@ -546,12 +543,11 @@ export default function Landing() {
             <div>
               <p className="eyebrow">In the workspace</p>
               <h3 className="mt-2 font-display text-xl font-medium text-ink">
-                Research that produces a record, not a dashboard of guesses.
+                Research that ends in a record, not a guess.
               </h3>
               <p className="mt-3 text-xs leading-6 text-mist">
-                Every screen is backed by stored data. Sample analysis results are
-                not hardcoded into production screens; demonstration data, where it
-                exists in the future, must be labelled DEMO.
+                Every screen uses saved data. No sample results are hard-coded.
+                Any future demo data must be labelled DEMO.
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
@@ -559,7 +555,7 @@ export default function Landing() {
                   className="gap-2 bg-emerald text-[#04130f] hover:bg-emerald/90"
                 >
                   <Link to="/auth?returnTo=/workspace">
-                    Enter the workspace <ArrowRight className="size-4" />
+Enter the workspace <ArrowRight className="size-4" />
                   </Link>
                 </Button>
                 <Button
@@ -598,11 +594,11 @@ export default function Landing() {
               <div className="max-w-xl">
                 <p className="eyebrow">Start with two inputs</p>
                 <h2 className="mt-2 font-display text-2xl font-medium leading-tight text-ink sm:text-3xl">
-                  A place, a date, and an honest record of what exists.
+                  A place, a date, and an honest record.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-mist">
-                  Location and capture date are all the imagery search requires.
-                  The calculator stands alone when that is all you need.
+                  You only need a location and a capture date. The calculator
+                  works on its own.
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -610,7 +606,7 @@ export default function Landing() {
                   asChild
                   className="h-11 gap-2 bg-emerald text-[#04130f] hover:bg-emerald/90"
                 >
-                  <Link to="/auth?returnTo=/workspace">Search imagery</Link>
+                  <Link to="/auth?returnTo=/workspace">Search images</Link>
                 </Button>
                 <Button
                   asChild
@@ -632,9 +628,9 @@ export default function Landing() {
           <div className="max-w-md">
             <Brand />
             <p className="mt-3 text-[11px] leading-5 text-mist">
-              Contains modified Copernicus Sentinel data where catalogue imagery is
-              referenced. Sentinel data are provided under the Copernicus Sentinel
-              Data Legal Notice. Geocoding © OpenStreetMap contributors (ODbL).
+              Contains modified Copernicus Sentinel data where images are
+              referenced. Sentinel data is used under the Copernicus Sentinel Data
+              Legal Notice. Geocoding © OpenStreetMap contributors (ODbL).
             </p>
           </div>
           <div className="grid gap-2 text-[11px] text-mist">
@@ -644,16 +640,16 @@ export default function Landing() {
             </span>
             <span className="flex items-center gap-1.5">
               <Database className="size-3.5 text-emerald" />
-              Convex records + protected file storage
+              Convex records and protected file storage
             </span>
             <span className="flex items-center gap-1.5">
               <FileText className="size-3.5 text-emerald" />
-              Reports reproduce recorded statuses, not optimistic summaries
+              Reports use recorded statuses, not upbeat summaries
             </span>
           </div>
           <p className="max-w-xs font-mono text-[9px] uppercase leading-5 tracking-[0.12em] text-mist/60">
-            Public educational research only. Not facility surveillance, not
-            stock monitoring, not a measurement of tank contents.
+            For public educational research only. Not for watching facilities,
+            tracking stock or measuring tank contents.
           </p>
         </div>
       </footer>

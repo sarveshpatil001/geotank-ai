@@ -95,7 +95,7 @@ export const search = action({
     if (!collection) {
       return {
         status: "invalid",
-        message: `Collection ${collectionId} is not supported by this deployment.`,
+        message: "This image collection is not supported.",
       };
     }
 
@@ -108,7 +108,7 @@ export const search = action({
       ) {
         return {
           status: "invalid",
-          message: "Maximum cloud cover must be between 0 and 100 percent.",
+          message: "The cloud limit must be between 0 and 100.",
         };
       }
       maxCloudPct = args.maxCloudPct;
@@ -121,7 +121,7 @@ export const search = action({
         return {
           status: "invalid",
           message:
-            "The nearby-date window must be a finite number between 1 and 15 days.",
+            "The date range must be between 1 and 15 days.",
         };
       }
       windowDays = normalized;
@@ -230,8 +230,8 @@ export const search = action({
         note:
           status === "empty"
             ? mode === "exact"
-              ? "The catalogue responded successfully but returned no imagery acquired on this exact date for the requested area. No other date was substituted."
-              : "The catalogue responded successfully but returned no imagery in the selected date window for this area."
+              ? "Copernicus answered, but found no image taken on this exact date for this area. No other date was swapped in."
+              : "Copernicus answered, but found no image in this date range for this area."
             : `All ${scenes.length} result(s) were acquired within the requested ${
                 mode === "exact" ? "date" : "window"
               }. Acquisition date is taken from the provider timestamp, not the processing date.`,

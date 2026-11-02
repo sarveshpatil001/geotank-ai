@@ -73,34 +73,34 @@ export default function HistoryPage() {
   return (
     <div className="space-y-7">
       <div>
-        <p className="eyebrow">Project history</p>
+        <p className="eyebrow">Your history</p>
         <h1 className="mt-2 font-display text-2xl font-medium tracking-tight text-ink sm:text-3xl">
-          Stored research records
+          Saved research records
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-mist">
-          Every record below is real stored data for your account. Counts are
-          computed from those records, not from demonstration fixtures.
+          Everything below is stored for your account. The counts come from
+          those records, not demo data.
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="loaded records"
+          label="records loaded"
           value={stats.records}
           hint={`up to ${recordLimit}`}
         />
         <StatTile
-          label="image uploads"
+          label="images uploaded"
           value={stats.uploads}
-          hint="within those records"
+          hint="in these records"
         />
         <StatTile
-          label="with AI commentary"
+          label="with AI comments"
           value={stats.analysed}
-          hint="within those records"
+          hint="in these records"
         />
         <StatTile
-          label="loaded calculations"
+          label="calculations loaded"
           value={stats.calculations}
           hint={`up to ${calculationLimit}`}
         />
@@ -133,17 +133,17 @@ export default function HistoryPage() {
         <TabsContent value="records" className="mt-4 space-y-3">
           {projects === undefined ? (
             <Panel>
-              <InlineSpinner label="Loading research records…" />
+              <InlineSpinner label="Loading records…" />
             </Panel>
           ) : projects.length === 0 ? (
             <EmptyState
               icon={Radar}
               title="No research records yet"
-              description="Search a location and capture date, or upload an image, to create your first record."
+              description="Search a place and capture date, or upload an image, to make your first record."
               action={
                 <Button asChild className="gap-2 bg-emerald text-[#04130f] hover:bg-emerald/90">
                   <Link to="/workspace">
-                    Start a research request <ArrowRight className="size-4" />
+                    Start a search <ArrowRight className="size-4" />
                   </Link>
                 </Button>
               }
@@ -177,12 +177,12 @@ export default function HistoryPage() {
                         </p>
                       </div>
                       <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-[0.08em] text-mist">
-                        <span>requested {project.requestedDate}</span>
-                        <span>acquired {acquisition ?? "n/a"}</span>
+                        <span>asked for {project.requestedDate}</span>
+                        <span>captured {acquisition ?? "not available"}</span>
                         <span>
                           {project.source === "catalogue"
-                            ? project.scene?.collectionId ?? "catalogue"
-                            : "upload · unverified"}
+                            ? project.scene?.collectionId ?? "Copernicus"
+                            : "upload · not checked"}
                         </span>
                       </p>
                     </div>
@@ -193,7 +193,7 @@ export default function HistoryPage() {
                   </div>
                   <p className="mt-3 border-t border-edge/40 pt-2.5 text-[11px] leading-4 text-mist">
                     {summary.headline}
-                    {project.analysis ? " · AI commentary stored" : ""}
+                    {project.analysis ? " · AI comments saved" : ""}
                   </p>
                 </Link>
               );
@@ -225,7 +225,7 @@ export default function HistoryPage() {
             <EmptyState
               icon={Calculator}
               title="No saved calculations"
-              description="The tank calculator runs locally and can save a record recomputed by the server-side engine."
+              description="The calculator runs in your browser. When you save, the server recalculates the result."
               action={
                 <Button asChild className="gap-2 bg-emerald text-[#04130f] hover:bg-emerald/90">
                   <Link to="/workspace/calculator">
@@ -262,8 +262,8 @@ export default function HistoryPage() {
                   </div>
                 </div>
                 <p className="text-[11px] leading-4 text-mist">
-                  Internal diameter {formatVolume(calculation.diameterM, 3)} m ·{" "}
-                  {calculation.heightM !== null ? "height" : "length"}{" "}
+                  Inside diameter {formatVolume(calculation.diameterM, 3)} m ·{" "}
+                  inside {calculation.heightM !== null ? "height" : "length"}{" "}
                   {formatVolume(calculation.heightM ?? calculation.lengthM ?? 0, 3)} m
                   · entered in {calculation.unit}
                 </p>
@@ -279,7 +279,7 @@ export default function HistoryPage() {
                   {confirming === calculation._id ? (
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] text-warn">
-                        Delete this saved calculation?
+                        Delete this calculation?
                       </span>
                       <Button
                         type="button"

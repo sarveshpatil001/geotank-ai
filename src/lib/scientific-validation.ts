@@ -80,37 +80,33 @@ export const CHECK_STATUS_STYLES: Record<
 export const STATUS_GLOSSARY: { status: CheckStatus; meaning: string }[] = [
   {
     status: "PASS",
-    meaning:
-      "A deterministic rule or provider field satisfied the stated condition.",
+    meaning: "The check met its rule.",
   },
   {
     status: "WARN",
-    meaning:
-      "The evidence is usable for research but has a material limitation you must carry into any conclusion.",
+    meaning: "The check passed, but there is a limit to keep in mind.",
   },
   {
     status: "FAIL",
-    meaning:
-      "A required condition was not met. Do not treat this input as suitable evidence.",
+    meaning: "The check did not pass. Do not rely on this input.",
   },
   {
     status: "NOT MEASURABLE",
-    meaning:
-      "The available data cannot support this measurement at all. The app will not estimate it.",
+    meaning: "The data cannot support this measurement. The app will not guess.",
   },
   {
     status: "NOT VERIFIED",
     meaning:
-      "A value exists but its truth has not been independently established.",
+      "A value exists, but no independent source has confirmed it.",
   },
   {
     status: "NOT APPLICABLE",
-    meaning: "The check does not apply to this kind of record.",
+    meaning: "This check does not apply to this record.",
   },
 ];
 
 const CLOUD_RULE =
-  "provider eo:cloud_cover tile statistic: ≤ 10% pass, ≤ 30% warn, > 30% warn with a tile-level limitation, missing not measurable";
+  "Cloud cover from Copernicus: 10% or less passes, 10–30% is a warning, over 30% is a warning with a tile limit, missing is cannot measure";
 
 /* -------------------------------------------------------------------------- */
 /* Catalogue-backed records                                                    */
@@ -135,31 +131,31 @@ export function buildSceneChecks({
       ? {
           id: "acquisition-date",
           kind: "evidence",
-          label: "Acquisition date matches the requested capture date",
+          label: "Capture date matches the date you asked for",
           status: "PASS",
-          detail: `Requested ${requestedDate}. Provider acquisition timestamp is ${scene.acquiredAt} (UTC), which falls on ${acquiredDate}. The processing date is not used as the capture date.`,
+          detail: `You asked for ${requestedDate}. Copernicus gives ${scene.acquiredAt} (UTC), which is ${acquiredDate}. The processing date is not used as the capture date.`,
           basis: "provider metadata",
-          rule: "acquisition datetime (UTC) date == requested date",
+          rule: "Capture date in UTC equals the date you asked for",
         }
       : {
           id: "acquisition-date",
           kind: "evidence",
-          label: "Acquisition date differs from the requested date",
+          label: "Capture date is different from the date you asked for",
           status: "WARN",
-          detail: `You requested ${requestedDate} and selected a nearby-date result. Provider acquisition timestamp is ${scene.acquiredAt} (UTC). No image was substituted without your selection.`,
+          detail: `You asked for ${requestedDate} and chose a nearby-date result. Copernicus gives ${scene.acquiredAt} (UTC). No image was substituted without your choice.`,
           basis: "provider metadata",
-          rule: "user-selected nearby-date window; no silent substitution",
+          rule: "You chose a nearby date; no silent replacement",
         },
   );
 
   checks.push({
     id: "catalogue-provenance",
     kind: "evidence",
-    label: "Catalogue provenance is recorded",
+    label: "Copernicus source is recorded",
     status: "PASS",
-    detail: `${scene.providerName} (${scene.collectionName}) returned item ${scene.itemId}. The metadata below is the provider's response, not reconstructed.`,
+    detail: `${scene.providerName} (${scene.collectionName}) returned image ${scene.itemId}. The data below is the response from Copernicus, not a rebuild.`,
     basis: "provider metadata",
-    rule: "provider item identifier + collection present in STAC response",
+    rule: "Image ID and collection returned by Copernicus",
   });
 
   checks.push(
@@ -167,21 +163,21 @@ export function buildSceneChecks({
       ? {
           id: "resolution-recorded",
           kind: "evidence",
-          label: "Spatial resolution is reported by the provider",
+          label: "Copernicus reports a pixel size",
           status: "PASS",
-          detail: `Provider-declared resolution: ${formatResolution(scene.resolutionM)}.`,
+          detail: `The pixel size from Copernicus is ${formatResolution(scene.resolutionM)}.`,
           basis: "provider metadata",
-          rule: "provider properties.gsd present",
+          rule: "Pixel size returned by Copernicus",
         }
       : {
           id: "resolution-recorded",
           kind: "evidence",
-          label: "Spatial resolution is absent",
+          label: "No pixel size reported",
           status: "NOT MEASURABLE",
           detail:
-            "The provider did not return a resolution for this item, so feature scale cannot be assessed.",
+            "Copernicus did not return a pixel size for this image, so feature scale cannot be checked.",
           basis: "provider metadata",
-          rule: "provider properties.gsd present",
+          rule: "Pixel size returned by Copernicus",
         },
   );
 
@@ -189,25 +185,25 @@ export function buildSceneChecks({
   checks.push({
     id: "tank-scale-measurement",
     kind: "scope-limit",
-    label: "Tank-level dimensional measurement",
+    label: "Measuring a tank from the image",
     status: "NOT MEASURABLE",
     detail:
       gsd !== null
-        ? `At ${gsd} m per pixel, a typical 20–40 m diameter tank spans only ${Math.max(1, Math.floor(20 / gsd))}–${Math.max(1, Math.floor(40 / gsd))} pixels. Roof edges, shell thickness and any internal configuration cannot be resolved to engineering tolerance, and no independent ground control points are measured in this app.`
-        : "Without a provider-declared ground sample distance, no image-derived tank dimension can be justified.",
+        ? `Each pixel covers ${gsd} m. A 20–40 m tank is only ${Math.max(1, Math.floor(20 / gsd))}–${Math.max(1, Math.floor(40 / gsd))} pixels wide. Roof edges, wall thickness and inside parts cannot be measured to engineering accuracy. The app also measures no independent ground control points.`
+        : "Without a pixel size from Copernicus, the app cannot justify a tank size from the image.",
     basis: "independent verification absent",
     rule:
-      "image-derived geometry requires ground sample distance and independent ground control; neither is sufficient here",
+      "A tank size from an image needs a pixel size and ground control points; neither is enough here",
   });
 
   if (scene.cloudCoverPct === null) {
     checks.push({
       id: "cloud-cover",
       kind: "evidence",
-      label: "Cloud cover assessment",
+      label: "Cloud cover check",
       status: "NOT MEASURABLE",
       detail:
-        "The provider did not report cloud cover for this item. Visual obstruction cannot be quantified from the available metadata.",
+        "Copernicus did not report cloud cover for this image. The app cannot measure visual blockage from the saved data.",
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
@@ -215,9 +211,9 @@ export function buildSceneChecks({
     checks.push({
       id: "cloud-cover",
       kind: "evidence",
-      label: "Tile-level cloud cover is high",
+      label: "Cloud cover is high",
       status: "WARN",
-      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}, above the 30% suitability threshold. This is a scene-tile statistic, not a measurement over your target; inspect the quicklook before relying on this item.`,
+      detail: `Copernicus reports tile-level cloud cover of ${formatCloudCover(scene.cloudCoverPct)}, above the 30% limit. This is a tile number, not a measurement over your target. Check the preview before you rely on this image.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
@@ -225,9 +221,9 @@ export function buildSceneChecks({
     checks.push({
       id: "cloud-cover",
       kind: "evidence",
-      label: "Partial tile-level cloud cover",
+      label: "Some cloud cover",
       status: "WARN",
-      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}. Parts of the scene tile may be obscured or shadowed; this is not a target-specific measurement.`,
+      detail: `Copernicus reports tile-level cloud cover of ${formatCloudCover(scene.cloudCoverPct)}. Some of the tile may be cloudy or shadowed. This is not a measurement of your target.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
@@ -235,9 +231,9 @@ export function buildSceneChecks({
     checks.push({
       id: "cloud-cover",
       kind: "evidence",
-      label: "Tile-level cloud cover within the usable threshold",
+      label: "Cloud cover is low",
       status: "PASS",
-      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}. It describes the scene tile, not your specific target.`,
+      detail: `Copernicus reports tile-level cloud cover of ${formatCloudCover(scene.cloudCoverPct)}. This is for the whole tile, not your target.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
@@ -251,44 +247,44 @@ export function buildSceneChecks({
       ? {
           id: "cloud-shadow",
           kind: "evidence",
-          label: "Cloud shadow classified by the provider",
+          label: "Copernicus maps cloud shadow",
           status: shadowStat.value > 2 ? "WARN" : "PASS",
-          detail: `Provider scene classification reports ${shadowStat.value}% cloud shadow over the scene tile. This is a tile-level statistic, not an assessment of your target.`,
+          detail: `Copernicus reports ${shadowStat.value}% cloud shadow over the tile. This is a tile number, not a check of your target.`,
           basis: "provider metadata",
-          rule: "provider statistics.cloud_shadow ≤ 2%",
+          rule: "Cloud shadow from Copernicus is 2% or less",
         }
       : {
           id: "cloud-shadow",
           kind: "evidence",
-          label: "Cloud shadow assessment",
+          label: "Cloud shadow check",
           status: "NOT MEASURABLE",
           detail:
-            "The provider did not include scene classification statistics, and shadow is not derived in this app.",
+            "Copernicus did not include cloud shadow data, and the app does not estimate it.",
           basis: "provider metadata",
-          rule: "provider statistics.cloud_shadow present",
+          rule: "Cloud shadow data returned by Copernicus",
         },
   );
 
   checks.push({
     id: "georeferencing",
     kind: "scope-limit",
-    label: "Georeferencing and measurement control",
+    label: "Map position and ground control",
     status: "WARN",
     detail:
-      "The provider footprint and coordinate reference system are recorded, but this app does not measure independent ground control points. Do not treat map overlay alignment as proof of geometric accuracy.",
+      "Copernicus supplies the outline and coordinate system. The app measures no independent ground control points. Do not treat a good fit on the map as proof of accuracy.",
     basis: "independent verification absent",
-    rule: "ground control point comparison not implemented",
+    rule: "No independent ground control points measured",
   });
 
   checks.push({
     id: "internal-liquid-level",
     kind: "scope-limit",
-    label: "Internal liquid level",
+    label: "Liquid level inside the tank",
     status: "NOT MEASURABLE",
     detail:
-      "Optical satellite imagery observes the outside of a tank. A visible roof, floating roof or shadow does not reveal the internal liquid level, and the app will not infer one.",
+      "Satellite images show the outside of a tank. A roof, floating roof or shadow does not show the liquid level, and the app will not guess.",
     basis: "independent verification absent",
-    rule: "optical imagery cannot observe internal liquid level",
+    rule: "An outside image cannot show the level inside a tank",
   });
 
   checks.push({
@@ -297,9 +293,9 @@ export function buildSceneChecks({
     label: "Liquid inventory",
     status: "NOT APPLICABLE",
     detail:
-      "Inventory is a physical quantity requiring authorised measurements, tank calibration and product data. It is outside the scope of this research tool and is never inferred from imagery.",
+      "Inventory needs approved measurements, tank calibration and product data. This research tool does not estimate it from images.",
     basis: "deterministic rule",
-    rule: "inventory requires independent measurement and calibration data",
+    rule: "Inventory needs independent measurement and calibration data",
   });
 
   checks.push(
@@ -307,33 +303,33 @@ export function buildSceneChecks({
       ? {
           id: "preview-availability",
           kind: "evidence",
-          label: "Provider preview available",
+          label: "Preview image from Copernicus",
           status: "PASS",
           detail:
-            "The catalogue returned a quicklook asset. It is a rendered preview for orientation, not radiometric data and not evidence of surface condition.",
+            "Copernicus returned a preview. It is for orientation only. It is not measurement data and does not show surface condition.",
           basis: "provider metadata",
-          rule: "provider asset with thumbnail/overview role present",
+          rule: "Preview file returned by Copernicus",
         }
       : {
           id: "preview-availability",
           kind: "evidence",
-          label: "Provider preview unavailable",
+          label: "No preview image",
           status: "NOT APPLICABLE",
           detail:
-            "No quicklook asset was returned for this item. Metadata remains usable; no preview is fabricated.",
+            "Copernicus returned no preview for this image. The metadata is still usable. The app does not make up an image.",
           basis: "provider metadata",
-          rule: "provider asset with thumbnail/overview role present",
+          rule: "Preview file returned by Copernicus",
         },
   );
 
   checks.push({
     id: "licence",
     kind: "evidence",
-    label: "Licence and attribution",
+    label: "Licence and credit",
     status: "PASS",
     detail: `${scene.attribution}. ${scene.licenseUrl}`,
     basis: "provider metadata",
-    rule: "provider license link or Sentinel Data Legal Notice recorded",
+    rule: "Licence link or Sentinel Data Legal Notice recorded",
   });
 
   return checks;
@@ -388,26 +384,26 @@ export function buildUploadChecks({
   checks.push({
     id: "upload-signature",
     kind: "evidence",
-    label: "File signature matches an allowed image format",
+    label: "File type is allowed",
     status: summary.signatureOk ? "PASS" : "FAIL",
     detail: summary.signatureOk
-      ? `The server matched the file's magic bytes to ${summary.contentType}.`
-      : "The file signature did not match the declared image type. The file should not be analysed.",
+      ? `The server matched the file bytes to ${summary.contentType}.`
+      : "The file bytes do not match the stated image type. Do not use this file.",
     basis: "deterministic rule",
-    rule: "JPEG / PNG / WebP magic-byte check",
+    rule: "JPEG, PNG or WebP file check",
   });
 
   checks.push({
     id: "upload-size",
     kind: "evidence",
-    label: "File size within the configured limit",
+label: "File size is within the limit",
     status:
       summary.sizeBytes > 0 && summary.sizeBytes <= UPLOAD_LIMITS.maxBytes
         ? "PASS"
         : "FAIL",
     detail: `${(summary.sizeBytes / (1024 * 1024)).toFixed(2)} MB received. Limit is ${UPLOAD_LIMITS.maxBytes / (1024 * 1024)} MB.`,
     basis: "deterministic rule",
-    rule: "0 < bytes ≤ 12 MiB",
+    rule: "File is larger than 0 bytes and no more than 12 MiB",
   });
 
   const width = summary.width ?? quality?.width ?? null;
@@ -418,33 +414,33 @@ export function buildUploadChecks({
       ? {
           id: "upload-dimensions",
           kind: "evidence",
-          label: "Pixel dimensions are sufficient for visual review",
+          label: "Image is large enough to view",
           status:
             Math.min(width, height) >= minPixels ? "PASS" : "WARN",
-          detail: `Server-read header dimensions: ${width} × ${height} px (short edge ${Math.min(width, height)} px, threshold ${minPixels} px).`,
+          detail: `The server read ${width} × ${height} px. The short edge is ${Math.min(width, height)} px. The minimum is ${minPixels} px.`,
           basis: "deterministic rule",
-          rule: `min(width, height) ≥ ${minPixels} px`,
+          rule: `Short edge is at least ${minPixels} px`,
         }
       : {
           id: "upload-dimensions",
           kind: "evidence",
-          label: "Pixel dimensions could not be decoded",
+label: "Image size could not be read",
           status: "FAIL",
           detail: "The image could not be decoded, so its size is unknown.",
           basis: "deterministic rule",
-          rule: `min(width, height) ≥ ${minPixels} px`,
+          rule: `Short edge is at least ${minPixels} px`,
         },
   );
 
   checks.push({
     id: "upload-provenance",
     kind: "evidence",
-    label: "Imagery source and provenance",
+    label: "Where the image came from",
     status: "NOT VERIFIED",
     detail:
-      "This file was supplied by you. It is not an authenticated satellite product, and no signature chain, provider identifier or acquisition record exists for it.",
+      "You supplied this file. It is not a checked satellite product. It has no Copernicus record or signed source.",
     basis: "independent verification absent",
-    rule: "uploaded files are never treated as authenticated catalogue products",
+    rule: "Uploaded files are never treated as checked satellite products",
   });
 
   const exifMatch =
@@ -456,25 +452,25 @@ export function buildUploadChecks({
       ? {
           id: "upload-capture-date",
           kind: "evidence",
-          label: "Entered date agrees with embedded EXIF DateTimeOriginal",
+          label: "Entered date matches the photo's EXIF date",
           status: exifMatch ? "PASS" : "FAIL",
           detail: exifMatch
-            ? `Embedded DateTimeOriginal ${summary.exifDateOriginal} agrees with the date you entered. EXIF is metadata inside the file and can be edited, so this is corroboration, not proof.`
-            : `Embedded DateTimeOriginal ${summary.exifDateOriginal} conflicts with the date you entered (${requestedDate}). The declared capture date is not supported by the file.`,
+            ? `The EXIF date is ${summary.exifDateOriginal}. It matches the date you entered. EXIF is data inside the file and can be edited, so it supports your date but does not prove it.`
+            : `The EXIF date is ${summary.exifDateOriginal}. It does not match the date you entered (${requestedDate}). The file does not support your date.`,
           basis: "deterministic rule",
-          rule: "EXIF DateTimeOriginal date == user-entered capture date",
+          rule: "EXIF capture date equals the date you entered",
         }
       : {
           id: "upload-capture-date",
           kind: "evidence",
-          label: "Capture date is declared by the user",
+          label: "You entered the capture date",
           status: "NOT VERIFIED",
           detail:
             summary.exifStatus === "unreadable"
-              ? "EXIF metadata was present but could not be parsed, and the capture date you entered has no independent support."
-              : "No EXIF DateTimeOriginal was found. The capture date you entered is an unverified declaration.",
+              ? "EXIF data was present but could not be read. Nothing independent supports the date you entered."
+              : "No EXIF capture date was found. The date you entered is not checked.",
           basis: "user-supplied input",
-          rule: "EXIF DateTimeOriginal present and parseable",
+          rule: "EXIF capture date is present and readable",
         },
   );
 
@@ -483,68 +479,68 @@ export function buildUploadChecks({
       ? {
           id: "upload-geolocation",
           kind: "evidence",
-          label: "Embedded GPS position",
+          label: "GPS position in the file",
           status: "WARN",
           detail:
-            "The file contains EXIF GPS coordinates. They are recorded for transparency but are not used to place the research request, and they are editable metadata.",
+            "The file contains EXIF GPS coordinates. They are saved for transparency but are not used to place the search. EXIF can be edited.",
           basis: "deterministic rule",
-          rule: "EXIF GPS IFD present",
+          rule: "EXIF GPS data is present",
         }
       : {
           id: "upload-geolocation",
           kind: "evidence",
-          label: "Image position",
+          label: "Image location",
           status: "NOT VERIFIED",
           detail:
-            "No embedded GPS position was found. Any location for this image would be your declaration.",
+            "No GPS position was found in the file. Any location for this image would come from you.",
           basis: "user-supplied input",
-          rule: "EXIF GPS IFD present",
+          rule: "EXIF GPS data is present",
         },
   );
 
   checks.push({
     id: "upload-ground-scale",
     kind: "scope-limit",
-    label: "Ground sample distance",
+    label: "Ground scale",
     status: "NOT MEASURABLE",
     detail:
-      "Pixel size on the ground is unknown without camera geometry, altitude and an independent reference. Resolution in pixels is not a ground resolution.",
+      "The ground size of each pixel is unknown without camera position, height and an independent scale reference. Pixel count is not ground distance.",
     basis: "independent verification absent",
-    rule: "ground sample distance requires acquisition geometry",
+    rule: "Ground scale needs capture position and camera data",
   });
 
   checks.push({
     id: "upload-tank-measurement",
     kind: "scope-limit",
-    label: "Image-derived tank measurement",
+    label: "Tank measurement from the image",
     status: "NOT MEASURABLE",
     detail:
-      "No calibrated scale, camera model or ground control is available for an uploaded photograph or screenshot. The app will not convert pixels into engineering dimensions.",
+      "An uploaded photo or screenshot has no calibrated scale, camera model or ground control. The app will not turn pixels into engineering sizes.",
     basis: "independent verification absent",
-    rule: "no calibrated scale present",
+    rule: "No calibrated scale is present",
   });
 
   checks.push({
     id: "upload-quality",
     kind: "evidence",
-    label: "Client-computed image statistics",
+    label: "Image statistics from this browser",
     status: quality ? "PASS" : "NOT MEASURABLE",
     detail: quality
-      ? `Mean luminance ${quality.meanLuma.toFixed(1)} / 255, contrast (σ) ${quality.stdDevLuma.toFixed(1)}, dark pixels ${(quality.darkPixelFraction * 100).toFixed(1)}%, near-white pixels ${(quality.brightPixelFraction * 100).toFixed(1)}%, focus proxy ${quality.laplacianVariance.toFixed(1)}. These are heuristic browser-side statistics, not a radiometric assessment.`
+      ? `Mean brightness ${quality.meanLuma.toFixed(1)} / 255, contrast ${quality.stdDevLuma.toFixed(1)}, dark pixels ${(quality.darkPixelFraction * 100).toFixed(1)}%, near-white pixels ${(quality.brightPixelFraction * 100).toFixed(1)}%, focus ${quality.laplacianVariance.toFixed(1)}. These are rough numbers from the browser, not a scientific image check.`
       : "Pixel statistics were not available for this upload.",
     basis: "client-computed image statistic",
-    rule: "canvas luma statistics on a ≤512 px downscale (heuristic)",
+    rule: "Rough brightness check on an image no larger than 512 px",
   });
 
   checks.push({
     id: "internal-liquid-level",
     kind: "scope-limit",
-    label: "Internal liquid level",
+    label: "Liquid level inside the tank",
     status: "NOT MEASURABLE",
     detail:
-      "An external image does not observe the inside of a tank. No liquid level can be inferred, whatever the visible roof or shadow pattern.",
+      "An outside image does not show the inside of a tank. The app cannot infer a liquid level from a roof or shadow.",
     basis: "independent verification absent",
-    rule: "external imagery cannot observe internal liquid level",
+    rule: "An outside image cannot show the level inside a tank",
   });
 
   checks.push({
@@ -553,9 +549,9 @@ export function buildUploadChecks({
     label: "Liquid inventory",
     status: "NOT APPLICABLE",
     detail:
-      "Inventory requires authorised measurements and calibration data. It is outside this tool's scope and is never inferred from an uploaded file.",
+      "Inventory needs approved measurements and calibration data. This tool does not estimate it from an uploaded file.",
     basis: "deterministic rule",
-    rule: "inventory requires independent measurement",
+    rule: "Inventory needs independent measurement",
   });
 
   return checks;
@@ -580,12 +576,12 @@ export function buildCalculationChecks(
       {
         id: "capacity-calculation",
         kind: "evidence",
-        label: "Theoretical capacity",
+        label: "Tank capacity",
         status: "NOT APPLICABLE",
         detail:
-          "No tank calculation is attached to this record. The calculator produces ideal-cylinder capacity from your own internal dimensions.",
+          "No tank calculation is attached. The calculator works out perfect-cylinder capacity from sizes you enter.",
         basis: "deterministic rule",
-        rule: "calculation attached to record",
+        rule: "A calculation is attached to the record",
       },
     ];
   }
@@ -593,21 +589,21 @@ export function buildCalculationChecks(
     {
       id: "capacity-calculation",
       kind: "evidence",
-      label: "Calculation executed by the deterministic engine",
+      label: "Capacity calculated by the fixed engine",
       status: "PASS",
-      detail: `${calculation.geometryLabel}: ${calculation.volumeM3.toFixed(6)} m³ computed by ${calculation.engineVersion}. IEEE-754 double precision; reference values are checked by the repository test script.`,
+      detail: `${calculation.geometryLabel}: ${calculation.volumeM3.toFixed(6)} m³ from ${calculation.engineVersion}. The test script checks reference values.`,
       basis: "deterministic rule",
-      rule: "V = π r² H (vertical) / V = π r² L (horizontal), engine version pinned",
+      rule: "V = π r² H for an upright tank, V = π r² L for a tank on its side; engine version fixed",
     },
     {
       id: "capacity-dimensions",
       kind: "scope-limit",
-      label: "Physical dimensions are independently verified",
+      label: "Physical sizes are independently checked",
       status: "NOT VERIFIED",
       detail:
-        "The dimensions were entered by the user. The arithmetic is exact for ideal cylinder geometry but the physical truth of the inputs, wall thickness, internal fittings and dead stock are not verified.",
+        "You entered the sizes. The maths is exact for a perfect cylinder, but no one has checked the real sizes, wall thickness, inside fittings or dead stock.",
       basis: "user-supplied input",
-      rule: "independent dimensional survey absent",
+      rule: "No independent size survey",
     },
     {
       id: "capacity-vs-inventory",
@@ -615,9 +611,9 @@ export function buildCalculationChecks(
       label: "Measured liquid inventory",
       status: "NOT MEASURABLE",
       detail:
-        "Theoretical capacity is not nominal capacity, usable capacity or measured inventory. Converting one into another requires tank calibration tables, liquid-level measurement, temperature and product data.",
+        "Full capacity is not rated capacity, usable capacity or measured inventory. Converting between them needs tank tables, a liquid-level reading, temperature and product data.",
       basis: "deterministic rule",
-      rule: "capacity ≠ usable capacity ≠ inventory",
+      rule: "Full capacity is not usable capacity or inventory",
     },
   ];
 }

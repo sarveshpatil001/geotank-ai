@@ -120,13 +120,13 @@ export const resolveLocation = action({
     if (query.length < 2) {
       return {
         status: "invalid",
-        message: "Enter a place name or coordinates, for example 51.95, 4.14.",
+        message: "Enter a place name or coordinates, such as 51.95, 4.14.",
       };
     }
     if (query.length > 200) {
       return {
         status: "invalid",
-        message: "That location query is too long (200 characters maximum).",
+        message: "That place name is too long. Use 200 characters or fewer.",
       };
     }
 
@@ -200,8 +200,8 @@ export const resolveLocation = action({
           cacheKey,
           response.status === 429 ? "rate_limited" : "upstream",
           response.status === 429
-            ? "The geocoder rate limit was reached. Wait a moment and retry."
-            : `The geocoder returned HTTP ${response.status}. The location was not resolved.`,
+            ? "The place lookup is busy. Wait a moment and try again."
+            : `The place lookup failed (HTTP ${response.status}). No place was found.`,
         );
       }
 
@@ -211,7 +211,7 @@ export const resolveLocation = action({
           ctx,
           cacheKey,
           "malformed",
-          "The geocoder response was not a result list. Nothing from it has been used.",
+          "The place lookup sent an unreadable reply. Nothing from it was used.",
         );
       }
 
@@ -222,7 +222,7 @@ export const resolveLocation = action({
       if (candidates.length === 0) {
         return {
           status: "empty",
-          message: `No place matched “${query}”. Try a more specific name or enter coordinates directly.`,
+          message: `No place matched “${query}”. Try a more specific name or enter coordinates.`,
         };
       }
 
@@ -247,8 +247,8 @@ export const resolveLocation = action({
         cacheKey,
         timedOut ? "timeout" : "network",
         timedOut
-          ? "The geocoder did not answer within 12 seconds. The location was not resolved."
-          : "The geocoder could not be reached. Check connectivity and retry.",
+          ? "The place lookup took too long (12 seconds). No place was found."
+          : "The place lookup could not be reached. Check your connection and try again.",
       );
     } finally {
       clearTimeout(timer);

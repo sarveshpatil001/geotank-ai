@@ -1,5 +1,16 @@
 import { StatusPill } from "./primitives";
-import type { ValidationCheck } from "@/lib/scientific-validation";
+import type {
+  EvidenceBasis,
+  ValidationCheck,
+} from "@/lib/scientific-validation";
+
+const BASIS_LABELS: Record<EvidenceBasis, string> = {
+  "provider metadata": "from Copernicus",
+  "deterministic rule": "fixed rule",
+  "user-supplied input": "from you",
+  "client-computed image statistic": "from this browser",
+  "independent verification absent": "no independent check",
+};
 
 function CheckItems({ checks }: { checks: ValidationCheck[] }) {
   return (
@@ -12,7 +23,7 @@ function CheckItems({ checks }: { checks: ValidationCheck[] }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <StatusPill status={check.status} />
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/70">
-              basis: {check.basis}
+              source: {BASIS_LABELS[check.basis]}
             </span>
           </div>
           <p className="mt-2.5 text-sm font-medium leading-5 text-ink">
@@ -37,9 +48,9 @@ export function ValidationList({ checks }: { checks: ValidationCheck[] }) {
     <div className="space-y-5">
       {evidence.length > 0 && (
         <section>
-          <p className="eyebrow">Evidence checks</p>
+          <p className="eyebrow">Checks on this record</p>
           <p className="mt-1 text-xs leading-5 text-mist">
-            Deterministic checks that assess the recorded evidence.
+            Fixed rules that test the saved evidence.
           </p>
           <div className="mt-3">
             <CheckItems checks={evidence} />
@@ -48,10 +59,10 @@ export function ValidationList({ checks }: { checks: ValidationCheck[] }) {
       )}
       {scopeLimits.length > 0 && (
         <section>
-          <p className="eyebrow">Scope limits</p>
+          <p className="eyebrow">What this record cannot show</p>
           <p className="mt-1 text-xs leading-5 text-mist">
-            What this record cannot establish, kept separate from its evidence
-            status.
+            These are limits, not failures. They are kept apart from the check
+            results.
           </p>
           <div className="mt-3">
             <CheckItems checks={scopeLimits} />

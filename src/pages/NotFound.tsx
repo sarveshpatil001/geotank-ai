@@ -22,10 +22,10 @@ export default function NotFound() {
             <Compass className="size-5 text-emerald" />
           </span>
           <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.24em] text-mint">
-            error 404 · outside the footprint
+            error 404 · off the map
           </p>
           <h1 className="mt-3 font-display text-3xl font-medium tracking-tight text-ink">
-            This coordinate has no record
+            This page has no record
           </h1>
           <p className="mt-3 text-sm leading-6 text-mist">
             The page does not exist. Your research records and calculations are
@@ -45,14 +45,14 @@ export default function NotFound() {
               variant="outline"
               className="h-11 gap-2 border-edge bg-transparent text-ink"
             >
-              <Link to="/">Back to overview</Link>
+              <Link to="/">Back to home</Link>
             </Button>
           </div>
         </div>
       </main>
 
       <p className="relative pb-8 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-mist/50">
-        deterministic engine · tank-math/1.0.0
+        fixed engine · tank-math/1.0.0
       </p>
     </div>
   );

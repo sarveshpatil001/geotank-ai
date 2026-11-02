@@ -67,7 +67,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Failed to send the verification code. Try again.",
+          : "We could not send the code. Try again.",
       );
       setIsLoading(false);
     }
@@ -83,7 +83,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       navigate(redirect);
     } catch (caught) {
       console.error("OTP verification error:", caught);
-      setError("The verification code you entered is incorrect.");
+      setError("That code is not correct. Try again.");
       setIsLoading(false);
       setOtp("");
     }
@@ -98,8 +98,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     } catch (caught) {
       console.error("Guest login error:", caught);
       setError(
-        `Failed to sign in as guest: ${
-          caught instanceof Error ? caught.message : "unknown error"
+        `Could not sign in as a guest.${
+          caught instanceof Error ? ` ${caught.message}` : " Try again."
         }`,
       );
       setIsLoading(false);
@@ -126,33 +126,33 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <Brand />
 
           <div className="max-w-md">
-            <p className="eyebrow">Secure workspace</p>
+            <p className="eyebrow">Private workspace</p>
             <h1 className="mt-3 font-display text-4xl font-medium leading-[1.08] tracking-tight text-ink text-balance">
               A research record
               <br />
-              you can defend.
+              you can stand behind.
             </h1>
             <p className="mt-4 text-sm leading-6 text-mist">
-              Real catalogue metadata, deterministic arithmetic and validation
-              statuses that stay attached to every report. No passwords: an email
-              one-time code or a guest session is enough.
+              Real image data, fixed maths and check results stay with every
+              report. No password needed. Use a one-time email code or a guest
+              session.
             </p>
             <ul className="mt-8 space-y-4">
               {[
                 {
                   icon: ScanLine,
-                  title: "Provider data, not reconstructions",
-                  copy: "Each scene keeps the acquisition timestamp, identifier and cloud cover the catalogue returned.",
+                  title: "Data from Copernicus, not a rebuild",
+                  copy: "Each image keeps the capture time, ID and cloud cover Copernicus returned.",
                 },
                 {
                   icon: BrainCircuit,
-                  title: "AI comments; maths decides",
-                  copy: "Model commentary is stored separately and cannot alter a calculation or a validation status.",
+                  title: "AI comments. Maths decides.",
+                  copy: "AI notes are stored on their own. They cannot change a calculation or a check result.",
                 },
                 {
                   icon: Lock,
                   title: "Your records stay yours",
-                  copy: "Queries and mutations check ownership on the server. Uploads can be deleted with their record.",
+                  copy: "The server checks who owns every record. Deleting a record can also delete its upload.",
                 },
               ].map((item) => (
                 <li key={item.title} className="flex gap-3">
@@ -169,9 +169,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           </div>
 
           <p className="font-mono text-[10px] uppercase leading-5 tracking-[0.14em] text-mist/60">
-            Copernicus Sentinel data · OpenStreetMap geocoding
+            Copernicus Sentinel data · OpenStreetMap place lookup
             <br />
-            deterministic engine tank-math/1.0.0
+            fixed engine tank-math/1.0.0
           </p>
         </aside>
 
@@ -190,8 +190,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       Open the workspace
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-mist">
-                      Research records are private to an account. Use a one-time
-                      email code, or continue as a guest to explore.
+                      Your records are private. Use a one-time email code, or
+                      continue as a guest to look around.
                     </p>
                   </div>
                   <form onSubmit={handleEmailSubmit}>
@@ -229,7 +229,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         ) : (
                           <ArrowRight className="size-4" />
                         )}
-                        Send one-time code
+                        Send code
                       </Button>
 
                       <div className="relative py-1">
@@ -335,7 +335,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           Use a different email
                         </Button>
                         <span className="font-mono text-[10px] text-mist/60">
-                          code expires quickly
+                          code expires soon
                         </span>
                       </div>
                     </div>
@@ -345,14 +345,14 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
               <div className="border-t border-edge/60 bg-abyss/50 px-6 py-3 text-center sm:px-8">
                 <p className="font-mono text-[10px] leading-4 tracking-[0.06em] text-mist/70">
-                  signed-in records · anonymous sessions supported
+                  signed-in records · guest sessions supported
                 </p>
               </div>
             </div>
 
             <p className="mt-6 text-center text-[11px] leading-5 text-mist/70">
-              By continuing you confirm this workspace is for legitimate research
-              on public data. It does not provide facility inventory monitoring.
+              By continuing, you agree to use this workspace for lawful research
+              on public data. It does not monitor facility inventory.
             </p>
             <div className="mt-6 flex justify-center">
               <button
@@ -360,7 +360,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 onClick={() => navigate("/")}
                 className="font-mono text-[10px] uppercase tracking-[0.16em] text-mist transition hover:text-ink"
               >
-                ← back to overview
+                ← Back to home
               </button>
             </div>
           </div>

@@ -137,7 +137,7 @@ export const interpret = action({
       return {
         status: "blocked",
         message:
-          "AI interpretation is disabled by the deployment operator. Deterministic validation and calculations are unaffected.",
+          "AI is turned off by the operator. Checks and calculations still work.",
       };
     }
 
@@ -156,7 +156,7 @@ export const interpret = action({
       return {
         status: "blocked",
         message:
-          "AI commentary is switched off in Settings → Privacy. Deterministic validation and calculations still run; enable AI there if you want commentary.",
+          "AI is off in Settings → AI and privacy. Checks and calculations still run. Turn it on there if you want commentary.",
       };
     }
 
@@ -164,7 +164,7 @@ export const interpret = action({
       return {
         status: "unavailable",
         message:
-          "No AI integration key is configured for this deployment, so no commentary can be produced. Nothing has been marked as analysed.",
+          "This deployment has no AI key, so commentary cannot run. Nothing was marked as analysed.",
       };
     }
 
@@ -197,7 +197,7 @@ export const interpret = action({
         });
         return {
           status: "error",
-          message: `The model call did not succeed: ${response.error ?? "unknown error"}. No commentary was stored.`,
+          message: `The model call failed: ${response.error ?? "unknown error"}. Nothing was saved.`,
         };
       }
 
@@ -214,7 +214,7 @@ export const interpret = action({
         return {
           status: "malformed",
           message:
-            "The model returned output that did not match the required structured shape, so it was rejected and nothing was stored. Try again.",
+            "The model sent an output with the wrong shape. It was rejected and nothing was saved. Try again.",
         };
       }
 
@@ -227,7 +227,7 @@ export const interpret = action({
         });
         return {
           status: "rejected",
-          message: `The model output was rejected by the scientific safety filter (${safety.reason}). Nothing was stored.`,
+          message: `The model output was rejected by the safety filter (${safety.reason}). Nothing was saved.`,
         };
       }
 
@@ -263,7 +263,7 @@ export const interpret = action({
       });
       return {
         status: "error",
-        message: `The AI adapter failed (${message}). No commentary was stored and no other result was affected.`,
+        message: `The AI service failed (${message}). Nothing was saved, and no other result was affected.`,
       };
     }
   },
