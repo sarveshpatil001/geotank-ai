@@ -810,3 +810,400 @@ Live verification (not a gate): `CONVEX_URL=https://acoustic-opossum-370.convex.
 The live AI call also printed an `@vly-ai/integrations` warning about system messages in the messages field. It did not fail the call; no prompt or output was exposed. It is recorded as a known leftover and was not changed because it is outside this backlog.
 
 Manual browser smoke test was not run. The 360 px checklist is in the final response.
+
+## Round 3
+
+Read this table first each iteration. No `git`/`gh`; this file is the ledger.
+
+| Item | Status | Files | Gate results | Evidence |
+|---|---|---|---|---|
+| W1. Server app extraction + HTTP tests | DONE | `main.ts`, `src/server/app.ts`, `tests/server-app.test.ts`, `tsconfig.app.json`, `src/types/deno.d.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 39/39; build 0 | `app.request()` caught headers lost after static response; fixed middleware order. `main.ts` now typechecked; no Deno binary needed. |
+| W2. Configurable frame-ancestors | DONE | `src/lib/security-headers.ts`, `tests/security-headers.test.ts`, `README.md` | tsc 0; lint 0 errors; engine 42/42; Vitest 41/41; build 0 | Valid HTTPS origins accepted; empty, invalid, path-bearing, mixed and `'none'`-with-origin values fall back to `'none'`; README documented |
+| W3. Guest/signed-in global daily buckets | DONE | `src/convex/lib/limits.ts`, `src/convex/ai.ts`, `src/convex/imagery.ts`, `src/convex/files.ts`, `tests/limits.test.ts`, `tests/upload-flow.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 43/43; build 0; Convex pushed 08:28:53 | Guest caps 20 AI, 100 imagery, 20 upload; signed-in 200/500/100; upload integration proves guest exhaustion does not block signed-in |
+| W4. Whole-token AI number guard | DONE | `src/convex/lib/aiGuard.ts`, `tests/ai-guard.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 44/44; build 0; Convex pushed 08:33:16 | Date fragments no longer supply allowed numbers; 10 m resolution still passes; written-number volume/fill claims reject; safety-net comment added |
+| W5. Supported system-prompt field | DONE | `src/convex/ai.ts`, `src/convex/lib/aiConfig.ts`, `tests/ai-status-cooldown.test.ts` | tsc 0; lint 0 errors; engine 42/42; Vitest 45/45; build 0; Convex pushed 08:37:07 | Stub asserts `system` field and user-only `messages`; live run has no system-message warning and 31 checks pass |
+| W6. Remove hard-coded test counts from UI/docs | DONE | `src/pages/workspace/Settings.tsx`, `README.md` | tsc 0; lint 0 errors; engine 42/42; Vitest 45/45; build 0 | No numeric test counts remain; copy now describes coverage only. Copy-only item; no new test. |
+| W7. Final proof | DONE | `PROGRESS.md` only | tsc 0; lint 0 errors; engine 42/42; Vitest 45/45; build 0; Convex pushed 08:41:48 | Live script: 31 checks passed; AI system-message warning gone |
+
+### Round 3 iteration 0 — ledger created
+
+All seven items start as TODO. Hard rules: do not edit `src/convex/auth.ts`, `src/convex/users.ts`, `vly-toolbar-readonly.tsx`, or `.env*`; no new dependencies; no `git`.
+
+### Round 3 iteration 1 — W1 evidence
+
+- `main.ts` imports `Hono` and `serveStatic` from `hono/deno`, builds the app inline, and calls `Deno.serve`.
+- `tsconfig.app.json` includes only `src` and `vly-toolbar-readonly.tsx`.
+- `tsconfig.node.json` includes only `vite.config.ts`.
+- Therefore `main.ts` has never been typechecked by the gate command.
+- `command -v deno` returned nothing, so `deno check main.ts` is not available on this host.
+- The planned test can exercise the app with Hono's `app.request()` without starting Deno or adding a dependency.
+
+Test-first evidence: `tests/server-app.test.ts` first failed on the missing `src/server/app` module. After extraction, both request tests failed with `Content-Security-Policy: null`. This exposed a real bug: headers were set before `await next()`, so the Response returned by static middleware did not carry them. Moving header application after `next()` fixed both tests.
+
+Implementation: `src/server/app.ts` exposes `createApp({ serveStatic })` and imports only `hono`, Hono types and the pure header function. `main.ts` is now the thin Deno wrapper. `main.ts` was added to `tsconfig.app.json`; `src/types/deno.d.ts` declares only the `Deno.serve(handler)` shape used by the wrapper. `bun tsc -b --noEmit` passes, so `deno check` was not needed.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  39 passed (39)
+   Start at  08:24:22
+   Duration  2.25s (import 45%, tests 36%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.45s
+```
+
+No `src/convex/` file changed, so W1 did not need a Convex push.
+
+### Round 3 iteration 2 — W2 frame-ancestors
+
+Evidence: `CONTENT_SECURITY_POLICY` contained a fixed `frame-ancestors 'none'` clause, so a deployment could not permit a trusted parent origin without editing code.
+
+Test-first evidence: `tests/security-headers.test.ts` first failed on the missing `frameAncestorsFromEnv`. It now covers a single origin, multiple origins, `'self'`, and fallback for `undefined`, empty, whitespace, malformed, path-bearing, `javascript:`, mixed valid/invalid, and `'none'` combined with an origin.
+
+Implementation: `FRAME_ANCESTORS` is read as a space-separated list of HTTPS origins (HTTP is accepted only for localhost). The whole value falls back to `'none'` if any token is invalid. The CSP is built per request. README documents the variable in plain English.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  41 passed (41)
+   Start at  08:25:50
+   Duration  2.25s (import 45%, tests 36%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.29s
+```
+
+No `src/convex/` file changed, so W2 did not need a Convex push.
+
+### Round 3 iteration 3 — W3 guest/signed-in global caps
+
+Evidence: imagery search and upload registration each had one global daily bucket, and AI had only per-user daily buckets. A guest could create a new account to get another per-user allowance, and all guests shared one global allowance rather than a lower guest allowance.
+
+Test-first evidence: `tests/limits.test.ts` and `tests/upload-flow.test.ts` failed before implementation: missing guest keys, missing `audienceForUser`, and a guest’s second upload resolved instead of being rate-limited. They now pass.
+
+Implementation: `audienceForUser` reads `isAnonymous === true` from the user row returned by `requireUser`. Global daily keys are now separate:
+
+| Action | Guest key / default | Signed-in key / default |
+|---|---|---|
+| AI | `ai:global:guest:day` / 20 | `ai:global:signed-in:day` / 200 |
+| Imagery search | `imagery:search:global:guest:day` / 100 | `imagery:search:global:signed-in:day` / 500 |
+| Upload registration | `upload:register:global:guest:day` / 20 | `upload:register:global:signed-in:day` / 100 |
+
+All are finite and guest limits are lower. The upload integration test exhausts the guest bucket, gets a rate-limit error, then registers successfully as a signed-in account. Existing `AI_DAILY_CAP`, `IMAGERY_SEARCH_GLOBAL_DAILY_CAP` and `UPLOAD_GLOBAL_DAILY_CAP` overrides still apply to their signed-in/global buckets; new guest overrides are `AI_GUEST_GLOBAL_DAILY_CAP`, `IMAGERY_SEARCH_GUEST_GLOBAL_DAILY_CAP` and `UPLOAD_GUEST_GLOBAL_DAILY_CAP`.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  43 passed (43)
+   Start at  08:29:23
+   Duration  2.32s (import 43%, tests 41%, transform 13%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.56s
+```
+
+Convex push: `✔ 08:28:53 Convex functions ready! (7.22s)`.
+
+### Round 3 iteration 4 — W4 whole-token AI number guard
+
+Evidence: `inputNumbers` used `/-?\d+(?:\.\d+)?/g` on the serialized payload. A date such as `2024-06-10` supplied `2024`, `06` and `10` as allowed numbers, so substring matches could pass the guard. Written numbers such as “ten thousand litres” were not consistently rejected.
+
+Test-first evidence: the new guard tests failed on `2024 m3` being accepted from a date-only input, and on `ten thousand litres` being accepted when `1000` appeared elsewhere in the input. They now pass.
+
+Implementation: input numbers use whole-token boundaries, exclude hyphens and dots around a token, and accept comma-grouped thousands plus decimals. Output measurements also require a whole-token boundary. A small word-number list plus a written-number unit regex rejects claims such as “ten thousand litres”; `half full` remains covered by the fill-claim regex. A code comment now states clearly that this guard is a safety net, not proof.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  44 passed (44)
+   Start at  08:33:49
+   Duration  2.61s (import 45%, tests 36%, transform 16%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 8.35s
+```
+
+Convex push: `✔ 08:33:16 Convex functions ready! (7.7s)`.
+
+### Round 3 iteration 5 — W5 supported system-prompt field
+
+Evidence: `node_modules/@vly-ai/integrations/dist/index.d.ts` exposes `AICompletionRequest.messages` with a `system` role, but no `system` or `allowSystemInMessages` field. Its `completion()` calls AI SDK `generateText({ messages })`, which emits the warning. The installed AI SDK `generateText` type supports a top-level `system` field and `allowSystemInMessages`.
+
+Test-first evidence: `tests/ai-status-cooldown.test.ts` was switched to a `generateText` stub. It failed while `ai.ts` still called `completion`, then passed. The test asserts the system prompt is in `request.system`, all `request.messages` roles are `user`, and the system text is absent from the serialized messages.
+
+Implementation: `ai.ts` gets the provider through `client.ai.getProvider()`, creates the configured model, and calls AI SDK `generateText` with `system: SYSTEM_PROMPT` and one user message. The adapter label now says `AI SDK generateText`; stored credits are `null` because the direct SDK call does not return the integration credit count. No new dependency was added; `ai` was already installed as the integration package's dependency.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  45 passed (45)
+   Start at  08:37:42
+   Duration  2.76s (import 44%, tests 38%, transform 15%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-CfnA0na_.js          484.48 kB │ gzip: 150.91 kB
+✓ built in 9.20s
+```
+
+Convex push: `✔ 08:37:07 Convex functions ready! (7.53s)`.
+
+Live run: 31 checks passed. The previous `@vly-ai/integrations` system-message warning did not appear. Last 5 lines:
+
+```text
+✓ linked calculations deleted
+✓ record list is empty after deletion
+
+31 live checks passed against https://acoustic-opossum-370.convex.cloud
+```
+
+### Round 3 iteration 6 — W6 remove hard-coded test counts
+
+Evidence: Settings said “42 fixed checks” and “37-test suite”; README said “42 deterministic checks”, “42 passed”, “37 passed across 10 Vitest files” and “31 live checks passed”. These would go stale whenever coverage changes.
+
+Implementation (copy only): Settings now describes what the fixed checks and separate test suite cover, with no counts. README command comments describe coverage, and “Last verified results” now says the engine suite, Vitest suite and live script passed without counts. No numbers were replaced with other numbers. `rg` finds no numeric test counts in either file; remaining `/40` matches are Tailwind opacity classes.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  45 passed (45)
+   Start at  08:40:16
+   Duration  2.28s (import 43%, tests 37%, transform 17%, worker 3%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DGJFajaI.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 9.03s
+```
+
+No `src/convex/` file changed, so W6 did not need a Convex push.
+
+### Round 3 iteration 7 — W7 final proof
+
+Final tree includes W1–W6. Convex push succeeded at 08:41:48. All five gates passed again after the last source change. Live verification passed 31 checks against `https://acoustic-opossum-370.convex.cloud`; the previous AI system-message warning was absent.
+
+Gate output (last 5 lines):
+
+**1. `bun tsc -b --noEmit`** (exit 0)
+```
+(no output — exit 0)
+```
+
+**2. `bun run lint`** (exit 0)
+```
+  130:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+✖ 17 problems (0 errors, 17 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.
+```
+
+**3. `bun run test:engine`** (exit 0)
+```
+✓ report contains the required sections and never promotes estimates
+✓ scene and upload reports keep every plain-language caveat
+✓ report uses stored calculation versions and prints entered inputs
+
+42 passed, 0 failed, 42 total checks
+```
+
+**4. `bunx vitest run`** (exit 0)
+```
+ Test Files  11 passed (11)
+      Tests  45 passed (45)
+   Start at  08:42:22
+   Duration  2.32s (import 44%, tests 37%, transform 16%, worker 2%)
+```
+
+**5. `bun run build`** (exit 0)
+```
+dist/assets/react-vendor-CrVS4-rd.js    46.34 kB │ gzip:  16.69 kB
+dist/assets/framer-motion-BGlJfi39.js  127.07 kB │ gzip:  41.84 kB
+dist/assets/index-DGJFajaI.js          484.48 kB │ gzip: 150.92 kB
+✓ built in 8.36s
+```
+
+Live verification (not a gate): 31 checks passed. Last 5 lines:
+
+```text
+✓ all test records deleted
+✓ uploaded image deleted from storage
+✓ linked calculations deleted
+✓ record list is empty after deletion
+
+31 live checks passed against https://acoustic-opossum-370.convex.cloud
+```
+
+Local HEAD smoke with the real Hono Bun static adapter: `HEAD /` returned 200 with the CSP and no cache header; `HEAD /assets/index-DGJFajaI.js` returned 200 with the CSP and `Cache-Control: public, max-age=31536000, immutable`. This is an in-process check, not an HTTP request to the deployed server.
+
+No browser and no real HTTP request to the deployed static server were run. The post-deploy `curl -I` check is in the final response.

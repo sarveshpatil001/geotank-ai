@@ -1,6 +1,7 @@
 "use node";
 
 import { createVlyIntegrations } from "@vly-ai/integrations";
+import { generateText } from "ai";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
@@ -19,7 +20,8 @@ import {
  * AI adapter — commentary only.
  *
  * Model: gpt-4o-mini through the deployment's VLY integration gateway.
- * Adapter: @vly-ai/integrations 0.6.14 `ai.completion`.
+ * Adapter: @vly-ai/integrations 0.6.14 provider + AI SDK `generateText`,
+ * with the system prompt in the supported `system` field.
  *
  * Hard boundaries:
  *  - The model receives minimally redacted catalogue/upload metadata as text.
@@ -131,7 +133,8 @@ function validateAnalysis(
 export const interpret = action({
   args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args): Promise<AiInterpretResult> => {
-    const userId = (await requireUser(ctx))._id;
+    const user = await requireUser(ctx);
+    const userId = user._id;
 
     if (aiKillSwitchEngaged()) {
       return {
@@ -169,7 +172,7 @@ export const interpret = action({
     }
 
     await enforceAiProjectCooldown(ctx, args.projectId);
-    await enforceAiLimits(ctx, userId);
+    await enforceAiLimits(ctx, user);
 
     const payload = buildAiPayload(project);
 
@@ -179,30 +182,16 @@ export const interpret = action({
     });
 
     try {
-      const response = await client.ai.completion({
-        model: AI_MODEL,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildUserPrompt(payload) },
-        ],
+      const model = client.ai.getProvider()(AI_MODEL);
+      const result = await generateText({
+        model,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildUserPrompt(payload) }],
         temperature: 0.2,
-        maxTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
       });
 
-      if (!response.success || !response.data) {
-        await ctx.runMutation(internal.audit.record, {
-          userId,
-          action: "analysis.failed",
-          detail: `model call failed: ${response.error ?? "unknown error"}`,
-        });
-        return {
-          status: "error",
-          message: `The model call failed: ${response.error ?? "unknown error"}. Nothing was saved.`,
-        };
-      }
-
-      const content = response.data.choices?.[0]?.message?.content ?? "";
-      const parsed = extractJson(content);
+      const parsed = extractJson(result.text);
       const validated = parsed ? validateAnalysis(parsed) : null;
 
       if (!validated) {
@@ -238,7 +227,7 @@ export const interpret = action({
         summary: validated.summary,
         sections: validated.sections,
         limitations: validated.limitations,
-        credits: response.usage?.credits ?? null,
+        credits: null,
         error: null,
       };
 

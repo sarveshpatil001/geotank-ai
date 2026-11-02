@@ -50,6 +50,36 @@ describe("AI output scientific safety filter", () => {
     ).toEqual({ ok: true });
   });
 
+  it("rejects date substrings and written-number claims", () => {
+    const dateOnly = { requestedCaptureDate: "2024-06-10" };
+    expect(
+      checkAiOutputSafety(
+        narrative({ summary: "The reported value is 10 m3." }),
+        dateOnly,
+      ).ok,
+    ).toBe(false);
+    expect(
+      checkAiOutputSafety(
+        narrative({ summary: "The reported value is 2024 m3." }),
+        dateOnly,
+      ).ok,
+    ).toBe(false);
+
+    expect(
+      checkAiOutputSafety(
+        narrative({ summary: "The tank holds ten thousand litres." }),
+        { declaredResolutionMetres: 1000 },
+      ).ok,
+    ).toBe(false);
+
+    expect(
+      checkAiOutputSafety(
+        narrative({ summary: "The tank is half full." }),
+        { cloudCoverPercent: 50 },
+      ).ok,
+    ).toBe(false);
+  });
+
   it("rejects numbers that are not present in the input data", () => {
     const input = { declaredResolutionMetres: 10, cloudCoverPercent: 18.66 };
 

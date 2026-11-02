@@ -101,9 +101,10 @@ Horizontal cylinder (full capacity): `V = π × r² × L`
 Commands:
 
 ```bash
-bun run test:engine            # 42 deterministic checks (engine, catalogue,
-                               # validation rules, EXIF, upload headers, report)
-bunx vitest run                # Convex auth, upload, pagination, deletion, AI guards
+bun run test:engine            # engine, catalogue, validation rules, EXIF,
+                               # upload headers and report checks
+bunx vitest run                # auth, limits, uploads, paging, deletion,
+                               # security headers and AI guards
 bun tsc -b --noEmit            # TypeScript + Convex generated types
 bunx convex dev --once         # push functions / regenerate types
 CONVEX_URL="https://<deployment>.convex.cloud" bun run scripts/verify-live.ts
@@ -111,17 +112,19 @@ CONVEX_URL="https://<deployment>.convex.cloud" bun run scripts/verify-live.ts
 
 Last verified results in the development deployment:
 
-- `42 passed, 0 failed` — engine/catalogue/validation tests, including reference
-  volumes, unit invariance, invalid inputs, exact-date filtering, cloud
-  exclusions, upload provenance and report sections.
-- `37 passed` across 10 Vitest files — ownership, rate limits, upload
-  finalisation, pagination, scheduled deletion and AI safety guards.
-- `31 live checks passed` — disposable anonymous session; unauthenticated access
-  rejected; live CDSE search returned a real scene; server-side STAC item fetch;
-  exact date preserved; liquid-level and image-measurement checks NOT
-  MEASURABLE; server volume `62.83185307179586 m³`; linked calculation deletion;
-  upload storage round-trip; paginated export; scheduled deletion; AI status
-  query returned an explicit outcome.
+- The engine/catalogue/validation suite passed, including reference volumes,
+  unit invariance, invalid inputs, exact-date filtering, cloud exclusions,
+  upload provenance and report sections.
+- The Vitest suite passed, covering ownership, rate limits, upload
+  finalisation, pagination, scheduled deletion, security headers and AI safety
+  guards.
+- The live verification script passed with a disposable anonymous session:
+  unauthenticated access rejected; live CDSE search returned a real scene;
+  server-side STAC item fetch; exact date preserved; liquid-level and
+  image-measurement checks NOT MEASURABLE; server volume
+  `62.83185307179586 m³`; linked calculation deletion; upload storage
+  round-trip; paginated export; scheduled deletion; AI status query returned an
+  explicit outcome.
 
 Status meanings used throughout the app: `PASS`, `WARN`, `FAIL`,
 `NOT MEASURABLE`, `NOT VERIFIED`, `NOT APPLICABLE`, plus engineering
@@ -152,6 +155,9 @@ round-trip and print layout were not visually verified).
   and SHA-256 before creating a record; duplicate storage references are
   rejected and failed blobs are deleted.
 - Credentials stay in server-side environment variables; none are bundled.
+- `FRAME_ANCESTORS` controls who may embed the published app. Give a
+  space-separated list of HTTPS origins. The default is `'none'`, and an empty
+  or invalid value falls back to `'none'`.
 - Users can export their data and delete individual records (including stored
   images). "Delete all" removes records, stored images, calculations, settings
   and activity entries. It does not delete the sign-in account or email. The

@@ -4,6 +4,9 @@
  * The prompt forbids numeric results and liquid-level claims, but a model can
  * still violate it. This filter rejects the whole response rather than trying
  * to rewrite a dangerous sentence, so a partial claim can never reach storage.
+ *
+ * This is a safety net, not proof. It catches common numeric and fill claims;
+ * it does not prove the remaining commentary is correct or harmless.
  */
 
 export type AiNarrative = {
@@ -16,10 +19,21 @@ export type AiSafetyResult =
   | { ok: true }
   | { ok: false; reason: string };
 
+const UNIT_PATTERN = String.raw`(?:m\s*³|m3|cubic\s+met(?:er|re)s?|lit(?:er|re)s?|l\b|us\s+gallons?|gallons?|gal\b|barrels?|bbl\b|%|percent\b|kilomet(?:er|re)s?|km\b|met(?:er|re)s?|m\b|centimet(?:er|re)s?|cm\b|millimet(?:er|re)s?|mm\b|feet|foot|ft\b|inches|inch)`;
+const WORD_NUMBER_PATTERN = String.raw`(?:one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)`;
+
 const NUMBER_WITH_UNIT = new RegExp(
-  String.raw`(\d[\d,]*(?:\.\d+)?|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand)\b)\s*(?:m\s*³|m3|cubic\s+met(?:er|re)s?|lit(?:er|re)s?|l\b|us\s+gallons?|gallons?|gal\b|barrels?|bbl\b|%|percent\b|kilomet(?:er|re)s?|km\b|met(?:er|re)s?|m\b|centimet(?:er|re)s?|cm\b|millimet(?:er|re)s?|mm\b|feet|foot|ft\b|inches|inch)`,
+  String.raw`(?<![\w.,-])(\d[\d,]*(?:\.\d+)?|${WORD_NUMBER_PATTERN})\s*(?:${UNIT_PATTERN})`,
   "gi",
 );
+
+const WRITTEN_NUMBER_WITH_UNIT = new RegExp(
+  String.raw`\b${WORD_NUMBER_PATTERN}(?:\s+(?:hundred|thousand))?\s*(?:${UNIT_PATTERN})`,
+  "i",
+);
+
+const INPUT_NUMBER =
+  /(?<![\w.-])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\w.-])/g;
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
@@ -32,6 +46,14 @@ const NUMBER_WORDS: Record<string, number> = {
   eight: 8,
   nine: 9,
   ten: 10,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
   hundred: 100,
   thousand: 1000,
 };
@@ -48,7 +70,7 @@ const NEGATION =
 function inputNumbers(input: unknown): Set<number> {
   const values = new Set<number>();
   const serialized = JSON.stringify(input ?? null);
-  for (const match of serialized.matchAll(/-?\d+(?:\.\d+)?/g)) {
+  for (const match of serialized.matchAll(INPUT_NUMBER)) {
     const value = Number(match[0]);
     if (Number.isFinite(value)) values.add(value);
   }
@@ -82,6 +104,13 @@ export function checkAiOutputSafety(
     ...output.limitations,
   ].join("\n");
   const allowedNumbers = inputNumbers(input);
+
+  if (WRITTEN_NUMBER_WITH_UNIT.test(allText)) {
+    return {
+      ok: false,
+      reason: "written-number measurement claim",
+    };
+  }
 
   for (const match of allText.matchAll(NUMBER_WITH_UNIT)) {
     const value = outputNumber(match[1]);

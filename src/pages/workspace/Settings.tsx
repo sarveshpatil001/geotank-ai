@@ -69,7 +69,7 @@ const LIMITATIONS: { label: string; status: string; detail: string }[] = [
     label: "Tank calculation engine",
     status: "TESTED",
     detail:
-      "42 fixed checks cover known volumes, unit changes, bad inputs, size limits, rounding, image data, check rules, camera data, URL safety and report sections. A separate 37-test suite covers sign-in, limits, uploads, paging, deletion, security headers and AI guards.",
+      "Fixed checks cover known volumes, unit changes, bad inputs, size limits, rounding, image data, check rules, camera data, URL safety and report sections. A separate test suite covers sign-in, limits, uploads, paging, deletion, security headers and AI guards.",
   },
   {
     label: "Image uploads",

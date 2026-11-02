@@ -52,7 +52,8 @@ export const registerUpload = mutation({
     contentType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = (await requireUser(ctx))._id;
+    const user = await requireUser(ctx);
+    const userId = user._id;
     // The storage lookup below is authoritative; this only rejects control
     // characters and absurd lengths from a tampered client.
     if (
@@ -108,7 +109,7 @@ export const registerUpload = mutation({
       );
     }
 
-    await enforceUploadRegistrationLimit(ctx);
+    await enforceUploadRegistrationLimit(ctx, user);
 
     const uploadId = await ctx.db.insert("pendingUploads", {
       userId,

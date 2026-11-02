@@ -10,13 +10,17 @@ const DAY_MS = 24 * HOUR_MS;
 export const LIMIT_DEFAULTS = {
   aiHourly: 10,
   aiDaily: 100,
+  aiGuestGlobalDaily: 20,
+  aiSignedInGlobalDaily: 200,
   aiProjectCooldown: 1,
   geocodeGlobal: 1,
   geocodeUserHourly: 30,
   imagerySearchHourly: 30,
+  imagerySearchGuestGlobalDaily: 100,
   imagerySearchGlobalDaily: 500,
   imageryHealthHourly: 10,
   uploadDaily: 20,
+  uploadGuestGlobalDaily: 20,
   uploadGlobalDaily: 100,
 } as const;
 
@@ -24,10 +28,22 @@ export const DEFAULT_AI_DAILY_CAP = LIMIT_DEFAULTS.aiDaily;
 
 const MAX_OVERRIDES = {
   aiDaily: 10_000,
+  aiGuestGlobalDaily: 1_000,
+  aiSignedInGlobalDaily: 5_000,
   geocodeGlobal: 20,
+  imagerySearchGuestGlobalDaily: 1_000,
   imagerySearchGlobalDaily: 5_000,
+  uploadGuestGlobalDaily: 500,
   uploadGlobalDaily: 1_000,
 } as const;
+
+export type LimitAudience = "guest" | "signed-in";
+
+export function audienceForUser(user: { isAnonymous?: boolean }): LimitAudience {
+  return user.isAnonymous === true ? "guest" : "signed-in";
+}
+
+type LimitUser = { _id: Id<"users">; isAnonymous?: boolean };
 
 type LimitEnv = Record<string, string | undefined>;
 
@@ -61,6 +77,22 @@ export function effectiveLimits(env: LimitEnv = process.env) {
       ),
       windowMs: DAY_MS,
     },
+    aiGuestGlobalDaily: {
+      capacity: positiveIntegerOverride(
+        env.AI_GUEST_GLOBAL_DAILY_CAP,
+        LIMIT_DEFAULTS.aiGuestGlobalDaily,
+        MAX_OVERRIDES.aiGuestGlobalDaily,
+      ),
+      windowMs: DAY_MS,
+    },
+    aiSignedInGlobalDaily: {
+      capacity: positiveIntegerOverride(
+        env.AI_SIGNED_IN_GLOBAL_DAILY_CAP,
+        LIMIT_DEFAULTS.aiSignedInGlobalDaily,
+        MAX_OVERRIDES.aiSignedInGlobalDaily,
+      ),
+      windowMs: DAY_MS,
+    },
     aiProjectCooldown: {
       capacity: LIMIT_DEFAULTS.aiProjectCooldown,
       windowMs: 60 * 1_000,
@@ -81,6 +113,14 @@ export function effectiveLimits(env: LimitEnv = process.env) {
       capacity: LIMIT_DEFAULTS.imagerySearchHourly,
       windowMs: HOUR_MS,
     },
+    imagerySearchGuestGlobalDaily: {
+      capacity: positiveIntegerOverride(
+        env.IMAGERY_SEARCH_GUEST_GLOBAL_DAILY_CAP,
+        LIMIT_DEFAULTS.imagerySearchGuestGlobalDaily,
+        MAX_OVERRIDES.imagerySearchGuestGlobalDaily,
+      ),
+      windowMs: DAY_MS,
+    },
     imagerySearchGlobalDaily: {
       capacity: positiveIntegerOverride(
         env.IMAGERY_SEARCH_GLOBAL_DAILY_CAP,
@@ -95,6 +135,14 @@ export function effectiveLimits(env: LimitEnv = process.env) {
     },
     uploadDaily: {
       capacity: LIMIT_DEFAULTS.uploadDaily,
+      windowMs: DAY_MS,
+    },
+    uploadGuestGlobalDaily: {
+      capacity: positiveIntegerOverride(
+        env.UPLOAD_GUEST_GLOBAL_DAILY_CAP,
+        LIMIT_DEFAULTS.uploadGuestGlobalDaily,
+        MAX_OVERRIDES.uploadGuestGlobalDaily,
+      ),
       windowMs: DAY_MS,
     },
     uploadGlobalDaily: {
@@ -140,12 +188,21 @@ async function debit(
 
 export async function enforceAiLimits(
   ctx: LimitCtx,
-  userId: Id<"users">,
+  user: LimitUser,
   now = Date.now(),
 ) {
   const limits = effectiveLimits();
-  await debit(ctx, `ai:user:${userId}:hour`, limits.aiHourly, now);
-  await debit(ctx, `ai:user:${userId}:day`, limits.aiDaily, now);
+  const audience = audienceForUser(user);
+  await debit(ctx, `ai:user:${user._id}:hour`, limits.aiHourly, now);
+  await debit(ctx, `ai:user:${user._id}:day`, limits.aiDaily, now);
+  await debit(
+    ctx,
+    `ai:global:${audience}:day`,
+    audience === "guest"
+      ? limits.aiGuestGlobalDaily
+      : limits.aiSignedInGlobalDaily,
+    now,
+  );
 }
 
 export async function enforceAiProjectCooldown(
@@ -173,20 +230,23 @@ export async function enforceGeocodeLimits(
 
 export async function enforceImagerySearchLimit(
   ctx: LimitCtx,
-  userId: Id<"users">,
+  user: LimitUser,
   now = Date.now(),
 ) {
   const limits = effectiveLimits();
+  const audience = audienceForUser(user);
   await debit(
     ctx,
-    `imagery:search:user:${userId}:hour`,
+    `imagery:search:user:${user._id}:hour`,
     limits.imagerySearchHourly,
     now,
   );
   await debit(
     ctx,
-    "imagery:search:global:day",
-    limits.imagerySearchGlobalDaily,
+    `imagery:search:global:${audience}:day`,
+    audience === "guest"
+      ? limits.imagerySearchGuestGlobalDaily
+      : limits.imagerySearchGlobalDaily,
     now,
   );
 }
@@ -219,12 +279,17 @@ export async function enforceUploadLimit(
 
 export async function enforceUploadRegistrationLimit(
   ctx: LimitCtx,
+  user: LimitUser,
   now = Date.now(),
 ) {
+  const limits = effectiveLimits();
+  const audience = audienceForUser(user);
   await debit(
     ctx,
-    "upload:register:global:day",
-    effectiveLimits().uploadGlobalDaily,
+    `upload:register:global:${audience}:day`,
+    audience === "guest"
+      ? limits.uploadGuestGlobalDaily
+      : limits.uploadGlobalDaily,
     now,
   );
 }

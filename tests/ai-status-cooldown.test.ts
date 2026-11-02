@@ -4,13 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import schema from "../src/convex/schema";
 
-const { completionMock } = vi.hoisted(() => ({
-  completionMock: vi.fn(),
+const { generateTextMock } = vi.hoisted(() => ({
+  generateTextMock: vi.fn(),
+}));
+
+vi.mock("ai", () => ({
+  generateText: generateTextMock,
 }));
 
 vi.mock("@vly-ai/integrations", () => ({
   createVlyIntegrations: () => ({
-    ai: { completion: completionMock },
+    ai: {
+      getProvider: () => (model: string) => ({ modelId: model }),
+    },
   }),
 }));
 
@@ -69,16 +75,16 @@ const CLEAN_ANALYSIS = JSON.stringify({
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  completionMock.mockReset();
+  generateTextMock.mockReset();
 });
 
 beforeEach(() => {
   vi.stubEnv("VLY_INTEGRATION_KEY", "test-integration-key");
   vi.stubEnv("AI_ENABLED", "true");
-  completionMock.mockResolvedValue({
-    success: true,
-    data: { choices: [{ message: { content: CLEAN_ANALYSIS } }] },
-    usage: { credits: 1 },
+  generateTextMock.mockResolvedValue({
+    text: CLEAN_ANALYSIS,
+    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+    finishReason: "stop",
   });
 });
 
@@ -104,39 +110,54 @@ describe("AI status query and project cooldown", () => {
 
       const first = await asUser.action(api.ai.interpret, { projectId });
       expect(first.status).toBe("ok");
-      expect(completionMock).toHaveBeenCalledTimes(1);
+      expect(generateTextMock).toHaveBeenCalledTimes(1);
 
       await expect(
         asUser.action(api.ai.interpret, { projectId }),
       ).rejects.toThrow(/rate limit reached/i);
-      expect(completionMock).toHaveBeenCalledTimes(1);
+      expect(generateTextMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
   });
 
+  it("sends the system prompt in the supported system field", async () => {
+    const t = testBackend();
+    const userId = await seedUser(t, "system-field@test.dev");
+    const projectId = await seedProject(t, userId);
+    const asUser = t.withIdentity(identity(userId));
+
+    const result = await asUser.action(api.ai.interpret, { projectId });
+    expect(result.status).toBe("ok");
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
+
+    const request = generateTextMock.mock.calls[0][0] as {
+      system: string;
+      messages: { role: string; content: string }[];
+    };
+    expect(request.system).toContain("metadata interpretation assistant");
+    expect(request.messages.every((message) => message.role === "user")).toBe(
+      true,
+    );
+    expect(JSON.stringify(request.messages)).not.toContain(
+      "metadata interpretation assistant",
+    );
+  });
+
   it("rejects unsafe model output without storing commentary", async () => {
-    completionMock.mockResolvedValue({
-      success: true,
-      data: {
-        choices: [
+    generateTextMock.mockResolvedValue({
+      text: JSON.stringify({
+        summary: "The tank is 70% full.",
+        sections: [
           {
-            message: {
-              content: JSON.stringify({
-                summary: "The tank is 70% full.",
-                sections: [
-                  {
-                    title: "Observation",
-                    body: "Internal liquid level is approximately 4.2 m.",
-                  },
-                ],
-                limitations: [],
-              }),
-            },
+            title: "Observation",
+            body: "Internal liquid level is approximately 4.2 m.",
           },
         ],
-      },
-      usage: { credits: 1 },
+        limitations: [],
+      }),
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      finishReason: "stop",
     });
 
     const t = testBackend();

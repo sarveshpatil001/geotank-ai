@@ -75,8 +75,9 @@ export const search = action({
     collection: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ImagerySearchResult> => {
-    const userId = (await requireUser(ctx))._id;
-    await enforceImagerySearchLimit(ctx, userId);
+    const user = await requireUser(ctx);
+    const userId = user._id;
+    await enforceImagerySearchLimit(ctx, user);
 
     const dateResult = validateCaptureDate(args.date);
     if (!dateResult.ok) {

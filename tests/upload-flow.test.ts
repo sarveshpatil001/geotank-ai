@@ -44,6 +44,7 @@ async function storeBlob(t: Backend, bytes: Uint8Array, type: string) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("server-owned scene creation", () => {
@@ -177,6 +178,45 @@ describe("pending uploads", () => {
     });
     expect(state.metadata).toBeNull();
     expect(state.pendingRows).toHaveLength(0);
+  });
+
+  it("keeps guest and signed-in global upload caps separate", async () => {
+    vi.stubEnv("UPLOAD_GUEST_GLOBAL_DAILY_CAP", "1");
+    vi.stubEnv("UPLOAD_GLOBAL_DAILY_CAP", "2");
+    const t = testBackend();
+    const guestId = await t.run(async (ctx) =>
+      ctx.db.insert("users", { email: "guest@test.dev", isAnonymous: true }),
+    );
+    const signedInId = await seedUser(t, "signed-in@test.dev");
+    const guest = t.withIdentity(identity(guestId));
+    const signedIn = t.withIdentity(identity(signedInId));
+
+    const firstGuestBlob = await storeBlob(t, png(10, 10), "image/png");
+    await expect(
+      guest.mutation(api.files.registerUpload, {
+        storageId: firstGuestBlob,
+        filename: "guest-one.png",
+        contentType: "image/png",
+      }),
+    ).resolves.toBeTruthy();
+
+    const secondGuestBlob = await storeBlob(t, png(11, 11), "image/png");
+    await expect(
+      guest.mutation(api.files.registerUpload, {
+        storageId: secondGuestBlob,
+        filename: "guest-two.png",
+        contentType: "image/png",
+      }),
+    ).rejects.toThrow(/rate limit/i);
+
+    const signedInBlob = await storeBlob(t, png(12, 12), "image/png");
+    await expect(
+      signedIn.mutation(api.files.registerUpload, {
+        storageId: signedInBlob,
+        filename: "signed-in.png",
+        contentType: "image/png",
+      }),
+    ).resolves.toBeTruthy();
   });
 
   it("prevents another user from finalising the upload", async () => {
