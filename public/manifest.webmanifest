@@ -1,0 +1,17 @@
+{
+  "name": "Tank Calculator AI",
+  "short_name": "TankCalc AI",
+  "description": "Geospatial research workspace for satellite imagery validation and deterministic tank geometry calculations.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071522",
+  "theme_color": "#071522",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

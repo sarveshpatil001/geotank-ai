@@ -1,0 +1,275 @@
+/* DO NOT CHANGE */
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
+/* DO NOT CHANGE */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Tank Calculator AI — geospatial palette */
+  --color-navy: #071522;
+  --color-abyss: #0b1d28;
+  --color-panel: #102a2b;
+  --color-deepgreen: #123a35;
+  --color-emerald: #43d9a0;
+  --color-mint: #78cfae;
+  --color-ink: #f0f7f4;
+  --color-mist: #91aaa5;
+  --color-edge: #24443e;
+  --color-danger: #f06b73;
+  --color-warn: #e8b95c;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-display: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* CHANGE VALUES FOR THEME */
+:root {
+  --radius: 0.75rem;
+  color-scheme: dark;
+
+  --background: #071522;
+  --foreground: #f0f7f4;
+  --card: #102a2b;
+  --card-foreground: #f0f7f4;
+  --popover: #0b1d28;
+  --popover-foreground: #f0f7f4;
+  --primary: #43d9a0;
+  --primary-foreground: #04130f;
+  --secondary: #123a35;
+  --secondary-foreground: #f0f7f4;
+  --muted: #0b1d28;
+  --muted-foreground: #91aaa5;
+  --accent: #123a35;
+  --accent-foreground: #f0f7f4;
+  --destructive: #f06b73;
+  --border: #24443e;
+  --input: #24443e;
+  --ring: #43d9a0;
+  --chart-1: #43d9a0;
+  --chart-2: #78cfae;
+  --chart-3: #e8b95c;
+  --chart-4: #4f9e8a;
+  --chart-5: #91aaa5;
+  --sidebar: #0b1d28;
+  --sidebar-foreground: #f0f7f4;
+  --sidebar-primary: #43d9a0;
+  --sidebar-primary-foreground: #04130f;
+  --sidebar-accent: #123a35;
+  --sidebar-accent-foreground: #f0f7f4;
+  --sidebar-border: #24443e;
+  --sidebar-ring: #43d9a0;
+}
+
+.dark {
+  --background: #071522;
+  --foreground: #f0f7f4;
+  --card: #102a2b;
+  --card-foreground: #f0f7f4;
+  --popover: #0b1d28;
+  --popover-foreground: #f0f7f4;
+  --primary: #43d9a0;
+  --primary-foreground: #04130f;
+  --secondary: #123a35;
+  --secondary-foreground: #f0f7f4;
+  --muted: #0b1d28;
+  --muted-foreground: #91aaa5;
+  --accent: #123a35;
+  --accent-foreground: #f0f7f4;
+  --destructive: #f06b73;
+  --border: #24443e;
+  --input: #24443e;
+  --ring: #43d9a0;
+  --chart-1: #43d9a0;
+  --chart-2: #78cfae;
+  --chart-3: #e8b95c;
+  --chart-4: #4f9e8a;
+  --chart-5: #91aaa5;
+  --sidebar: #0b1d28;
+  --sidebar-foreground: #f0f7f4;
+  --sidebar-primary: #43d9a0;
+  --sidebar-primary-foreground: #04130f;
+  --sidebar-accent: #123a35;
+  --sidebar-accent-foreground: #f0f7f4;
+  --sidebar-border: #24443e;
+  --sidebar-ring: #43d9a0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: rgba(67, 217, 160, 0.28);
+    color: #f0f7f4;
+  }
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #071522;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1c3a35;
+    border-radius: 999px;
+    border: 2px solid #071522;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--color-mint);
+  }
+  .panel {
+    background:
+      linear-gradient(160deg, rgba(18, 58, 53, 0.55), rgba(11, 29, 40, 0.92)),
+      #0b1d28;
+    border: 1px solid rgba(36, 68, 62, 0.85);
+    border-radius: var(--radius-lg);
+  }
+  .panel-flat {
+    background: #0b1d28;
+    border: 1px solid rgba(36, 68, 62, 0.85);
+    border-radius: var(--radius-lg);
+  }
+}
+
+@layer utilities {
+  .geo-grid {
+    background-image:
+      linear-gradient(rgba(52, 112, 98, 0.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(52, 112, 98, 0.16) 1px, transparent 1px);
+    background-size: 44px 44px;
+    background-position: center center;
+  }
+  .geo-grid-fine {
+    background-image:
+      linear-gradient(rgba(52, 112, 98, 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(52, 112, 98, 0.12) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .geo-rings {
+    background-image: radial-gradient(
+      circle at 50% 50%,
+      transparent 0,
+      transparent 27%,
+      rgba(67, 217, 160, 0.1) 27.4%,
+      transparent 28%,
+      transparent 45%,
+      rgba(67, 217, 160, 0.08) 45.4%,
+      transparent 46%,
+      transparent 63%,
+      rgba(67, 217, 160, 0.06) 63.4%,
+      transparent 64%
+    );
+  }
+  .glow-emerald {
+    box-shadow:
+      0 0 0 1px rgba(67, 217, 160, 0.18),
+      0 18px 60px -30px rgba(67, 217, 160, 0.55);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: #ffffff !important;
+    color: #101820 !important;
+  }
+  .print-hide {
+    display: none !important;
+  }
+  .print-area {
+    background: #ffffff !important;
+    color: #101820 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  .print-area * {
+    color: #101820 !important;
+    border-color: #c9d3ce !important;
+  }
+  .print-area a {
+    text-decoration: underline;
+  }
+  .print-area .print-muted {
+    color: #4c5b56 !important;
+  }
+}
