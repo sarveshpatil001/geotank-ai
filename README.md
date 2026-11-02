@@ -106,7 +106,7 @@ Last verified results in the development deployment:
 - `32 passed, 0 failed` — engine/catalogue/validation tests, including reference
   volumes, unit invariance, invalid inputs, exact-date filtering, cloud
   exclusions, upload provenance and report sections.
-- `27 live checks passed` — disposable anonymous session; unauthenticated access
+- `28 live checks passed` — disposable anonymous session; unauthenticated access
   rejected; live CDSE search returned a real scene; record creation; exact date
   preserved; liquid-level and image-measurement checks NOT MEASURABLE; server
   volume `62.83185307179586 m³`; linked calculation deletion; upload storage

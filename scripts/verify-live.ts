@@ -75,6 +75,14 @@ if (geo.status !== "ok") process.exit(1);
 const candidate = geo.candidates[0];
 ok(candidate.bbox.length === 4, "resolved candidate carries a bounding box");
 
+const placeGeo = await client.action(api.geocoding.resolveLocation, {
+  query: "Rotterdam, Netherlands",
+});
+ok(
+  placeGeo.status === "ok" && placeGeo.candidates.length > 0,
+  `place-name location resolved (${placeGeo.status})`,
+);
+
 const search = await client.action(api.imagery.search, {
   bbox: candidate.bbox,
   date: "2024-06-28",
