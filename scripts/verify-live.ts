@@ -10,7 +10,6 @@
  */
 
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 
 import { ConvexHttpClient } from "convex/browser";
 
@@ -59,10 +58,13 @@ try {
   geoRejected = true;
 }
 ok(geoRejected, "unauthenticated geocoding is rejected");
-const unauthProjects = await unauthenticated.query(api.projects.list, {
-  limit: 5,
-});
-ok(unauthProjects.length === 0, "unauthenticated project list is empty");
+let listRejected = false;
+try {
+  await unauthenticated.query(api.projects.list, { limit: 5 });
+} catch {
+  listRejected = true;
+}
+ok(listRejected, "unauthenticated project list is rejected");
 
 const settings = await client.query(api.settings.get, {});
 ok(typeof settings.aiEnabled === "boolean", "settings query returns a real AI preference");
@@ -104,12 +106,11 @@ let projectId: string | null = null;
 
 if (search.status === "ok" && search.scenes.length > 0) {
   const scene = search.scenes[0];
-  const created = await client.mutation(api.projects.createFromScene, {
+  const created = await client.action(api.projects.createFromScene, {
+    itemId: scene.itemId,
+    collectionId: scene.collectionId,
     location: candidate,
     requestedDate: search.requestedDate,
-    dateMatch:
-      scene.acquiredAt.slice(0, 10) === search.requestedDate ? "exact" : "window",
-    scene,
   });
   projectId = created.id;
   ok(Boolean(created.id), "catalogue record stored");
@@ -194,29 +195,18 @@ const uploaded = (await uploadResponse.json()) as { storageId?: string };
 ok(Boolean(uploaded.storageId), "storage returned a file id");
 
 if (uploaded.storageId) {
-  const digest = createHash("sha256").update(png).digest("hex");
-  const uploadProject = await client.mutation(api.projects.createFromUpload, {
+  const pending = await client.mutation(api.files.registerUpload, {
+    storageId: uploaded.storageId,
+    filename: "integration-check.png",
+    contentType: "image/png",
+  });
+  ok(Boolean(pending.uploadId), "upload registered as pending");
+  const uploadProject = await client.action(api.upload.finalizeUpload, {
+    uploadId: pending.uploadId,
     location: candidate,
     requestedDate: "2023-05-01",
-    upload: {
-      storageId: uploaded.storageId,
-      filename: "integration-check.png",
-      contentType: "image/png",
-      sizeBytes: png.byteLength,
-      width: 1,
-      height: 1,
-      sha256: digest,
-      signatureOk: true,
-      exifStatus: "absent",
-      exifDateOriginal: null,
-      exifHasGps: false,
-      exifMake: null,
-      exifModel: null,
-      declaredCaptureDate: "2023-05-01",
-      clientMetrics: null,
-    },
   });
-  ok(Boolean(uploadProject.id), "upload record stored");
+  ok(Boolean(uploadProject.id), "server finalised and stored the upload");
   const uploadRecord = await client.query(api.projects.get, {
     id: uploadProject.id as never,
   });

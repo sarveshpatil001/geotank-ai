@@ -70,8 +70,11 @@ src/convex/settings.ts           preferences, export, deletion
   identifying User-Agent, a 12 s timeout, low request volume and a 30-day cache.
   Attribution: © OpenStreetMap contributors, ODbL 1.0.
 - **AI gateway** — the deployment's existing `@vly-ai/integrations` key, model
-  `gpt-4o-mini`. Only metadata text is sent (no image pixels, no exact
-  coordinates). Calls may bill to the deployment's integration account.
+  `gpt-4o-mini`. Only minimised metadata text is sent: no image pixels, no
+  filenames and no exact coordinates. Coordinate-sourced locations become
+  "user-entered coordinates (withheld)"; geocoder labels are reduced to their
+  last two comma-separated components. Calls may bill to the deployment's
+  integration account.
 
 No paid data service, map tile subscription or additional API key is required.
 

@@ -1,5 +1,4 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import {
   bboxAroundPoint,
@@ -10,6 +9,9 @@ import {
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalMutation, internalQuery } from "./_generated/server";
+import { requireUser } from "./lib/auth";
+import { enforceGeocodeLimits } from "./lib/limits";
+import { isFailureFresh } from "./lib/negativeCache";
 import { locationValidator } from "./validators";
 
 /**
@@ -54,14 +56,28 @@ export type GeocodeResponse =
     }
   | { status: "empty"; message: string }
   | { status: "invalid"; message: string }
-  | { status: "error"; kind: string; message: string };
+  | {
+      status: "error";
+      kind: string;
+      message: string;
+      cached?: boolean;
+    };
 
-async function requireUserId(ctx: ActionCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new ConvexError("Sign in before resolving a location.");
-  }
-  return userId;
+const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function rememberFailure(
+  ctx: ActionCtx,
+  key: string,
+  kind: string,
+  message: string,
+) {
+  await ctx.runMutation(internal.geocoding.writeFailure, {
+    key,
+    kind,
+    message,
+    at: Date.now(),
+  });
+  return { status: "error" as const, kind, message, cached: false };
 }
 
 function candidateFromNominatim(entry: unknown): LocationCandidate | null {
@@ -98,7 +114,7 @@ function candidateFromNominatim(entry: unknown): LocationCandidate | null {
 export const resolveLocation = action({
   args: { query: v.string() },
   handler: async (ctx, args): Promise<GeocodeResponse> => {
-    await requireUserId(ctx);
+    const user = await requireUser(ctx);
 
     const query = args.query.trim();
     if (query.length < 2) {
@@ -133,7 +149,21 @@ export const resolveLocation = action({
       };
     }
 
+    await enforceGeocodeLimits(ctx, user._id);
+
     const cacheKey = query.toLowerCase().replace(/\s+/g, " ");
+    const recentFailure = await ctx.runQuery(internal.geocoding.readFailure, {
+      key: cacheKey,
+    });
+    if (recentFailure && isFailureFresh(recentFailure.at, Date.now())) {
+      return {
+        status: "error",
+        kind: recentFailure.kind,
+        message: recentFailure.message,
+        cached: true,
+      };
+    }
+
     const cached = await ctx.runQuery(internal.geocoding.readCache, {
       key: cacheKey,
     });
@@ -165,24 +195,24 @@ export const resolveLocation = action({
       });
 
       if (!response.ok) {
-        return {
-          status: "error",
-          kind: response.status === 429 ? "rate_limited" : "upstream",
-          message:
-            response.status === 429
-              ? "The geocoder rate limit was reached. Wait a moment and retry."
-              : `The geocoder returned HTTP ${response.status}. The location was not resolved.`,
-        };
+        return await rememberFailure(
+          ctx,
+          cacheKey,
+          response.status === 429 ? "rate_limited" : "upstream",
+          response.status === 429
+            ? "The geocoder rate limit was reached. Wait a moment and retry."
+            : `The geocoder returned HTTP ${response.status}. The location was not resolved.`,
+        );
       }
 
       const payload: unknown = await response.json();
       if (!Array.isArray(payload)) {
-        return {
-          status: "error",
-          kind: "malformed",
-          message:
-            "The geocoder response was not a result list. Nothing from it has been used.",
-        };
+        return await rememberFailure(
+          ctx,
+          cacheKey,
+          "malformed",
+          "The geocoder response was not a result list. Nothing from it has been used.",
+        );
       }
 
       const candidates = payload
@@ -211,17 +241,15 @@ export const resolveLocation = action({
     } catch (error) {
       const name = error instanceof Error ? error.name : "Error";
       const message = error instanceof Error ? error.message : "";
-      return {
-        status: "error",
-        kind:
-          name === "AbortError" || /abort/i.test(message)
-            ? "timeout"
-            : "network",
-        message:
-          name === "AbortError" || /abort/i.test(message)
-            ? "The geocoder did not answer within 12 seconds. The location was not resolved."
-            : "The geocoder could not be reached. Check connectivity and retry.",
-      };
+      const timedOut = name === "AbortError" || /abort/i.test(message);
+      return await rememberFailure(
+        ctx,
+        cacheKey,
+        timedOut ? "timeout" : "network",
+        timedOut
+          ? "The geocoder did not answer within 12 seconds. The location was not resolved."
+          : "The geocoder could not be reached. Check connectivity and retry.",
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -249,6 +277,12 @@ export const writeCache = internalMutation({
     fetchedAt: v.number(),
   },
   handler: async (ctx, args) => {
+    const existingFailure = await ctx.db
+      .query("geocodeFailures")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+    if (existingFailure) await ctx.db.delete(existingFailure._id);
+
     const existing = await ctx.db
       .query("geocodeCache")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -265,5 +299,81 @@ export const writeCache = internalMutation({
       payload: args.payload,
       fetchedAt: args.fetchedAt,
     });
+  },
+});
+
+export const readFailure = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("geocodeFailures")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+  },
+});
+
+export const writeFailure = internalMutation({
+  args: {
+    key: v.string(),
+    kind: v.string(),
+    message: v.string(),
+    at: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("geocodeFailures")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .first();
+    const failure = {
+      kind: args.kind.slice(0, 40),
+      message: args.message.slice(0, 300),
+      at: args.at,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, failure);
+      return existing._id;
+    }
+    return await ctx.db.insert("geocodeFailures", {
+      key: args.key.slice(0, 200),
+      ...failure,
+    });
+  },
+});
+
+/** Daily maintenance: successful lookups are kept for 30 days (the Nominatim
+ *  policy explicitly asks for caching), and stale failure rows are removed. */
+export const purgeExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoff = now - CACHE_MAX_AGE_MS;
+    let cacheDeleted = 0;
+    let failuresDeleted = 0;
+
+    for (let round = 0; round < 20; round += 1) {
+      const rows = await ctx.db
+        .query("geocodeCache")
+        .withIndex("by_fetched_at", (q) => q.lt("fetchedAt", cutoff))
+        .take(100);
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+        cacheDeleted += 1;
+      }
+    }
+
+    for (let round = 0; round < 20; round += 1) {
+      const rows = await ctx.db
+        .query("geocodeFailures")
+        .withIndex("by_at", (q) => q.lt("at", cutoff))
+        .take(100);
+      if (rows.length === 0) break;
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+        failuresDeleted += 1;
+      }
+    }
+
+    return { cacheDeleted, failuresDeleted, ranAt: now };
   },
 });

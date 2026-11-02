@@ -14,6 +14,8 @@ import {
   buildSearchBody,
   classifyCatalogueFailure,
   dayInterval,
+  isAllowedStoredUrl,
+  normalizeGeometry,
   normalizeSearchResponse,
   normalizeStacItem,
   parseCoordinateInput,
@@ -28,19 +30,25 @@ import {
   buildCalculationChecks,
   buildSceneChecks,
   buildUploadChecks,
+  overallStatus,
   summarizeChecks,
 } from "../src/lib/scientific-validation";
 import { buildResearchReport, reportToMarkdown } from "../src/lib/report";
 import {
   computeCapacity,
+  ENGINE_VERSION,
   estimateMassFromDensity,
   formatDecimal,
   formatVolume,
+  isLengthUnit,
   LENGTH_UNITS,
   parseLength,
   type LengthUnit,
 } from "../src/lib/tank-geometry";
-import type { ResearchProjectRecord } from "../src/lib/research-types";
+import type {
+  CalculationRecord,
+  ResearchProjectRecord,
+} from "../src/lib/research-types";
 
 let passed = 0;
 let failed = 0;
@@ -134,6 +142,13 @@ test("unit conversion is invariant across m, cm, mm, ft and in", () => {
   assert.equal(LENGTH_UNITS.ft.metersPerUnit, 0.3048);
 });
 
+test("length-unit guard ignores inherited object keys", () => {
+  assert.equal(isLengthUnit("m"), true);
+  assert.equal(isLengthUnit("toString"), false);
+  assert.equal(isLengthUnit("__proto__"), false);
+  assert.equal(isLengthUnit("constructor"), false);
+});
+
 test("invalid dimensions are rejected with explicit codes", () => {
   const cases: { input: string | number; code: string }[] = [
     { input: "", code: "REQUIRED" },
@@ -218,6 +233,14 @@ test("mass estimate is explicitly density-based and validated", () => {
   assert.equal(estimateMassFromDensity(1, 3000).ok, false);
 });
 
+test("density parsing rejects radix prefixes instead of coercing them", () => {
+  for (const input of ["0x10", "0b10", "0o10", "Infinity", "1,000"]) {
+    const outcome = estimateMassFromDensity(1, input);
+    assert.equal(outcome.ok, false, `accepted density ${input}`);
+    if (!outcome.ok) assert.equal(outcome.problem.code, "NOT_A_NUMBER");
+  }
+});
+
 test("presentation rounding is applied only by the formatter", () => {
   assert.equal(formatDecimal(62.83185307179586, 3), "62.832");
   assert.equal(formatVolume(62831.85307179586, 1), "62,831.9");
@@ -239,6 +262,11 @@ test("capture date validation rejects impossible and future dates", () => {
   assert.equal(validateCaptureDate("2027-01-01", fixedNow).ok, false);
 });
 
+test("capture date cannot predate Sentinel-2 availability", () => {
+  assert.equal(validateCaptureDate("2015-06-22", fixedNow).ok, false);
+  assert.equal(validateCaptureDate("2015-06-23", fixedNow).ok, true);
+});
+
 test("exact-date search uses a closed UTC day interval", () => {
   assert.equal(
     dayInterval("2024-06-28"),
@@ -248,10 +276,14 @@ test("exact-date search uses a closed UTC day interval", () => {
 
 test("nearby-date windows are explicit and bounded", () => {
   const window = windowInterval("2024-06-28", 3);
+  assert.ok(window);
+  if (!window) return;
   assert.equal(window.startDate, "2024-06-25");
   assert.equal(window.endDate, "2024-07-01");
   assert.equal(window.windowDays, 3);
-  assert.equal(windowInterval("2024-06-28", 90).windowDays, 15);
+  assert.equal(windowInterval("2024-06-28", 90)?.windowDays, 15);
+  assert.equal(windowInterval("2024-06-28", Number.NaN), null);
+  assert.equal(windowInterval("2024-06-28", Number.POSITIVE_INFINITY), null);
 });
 
 test("coordinate input parsing covers common formats and rejects names", () => {
@@ -265,6 +297,9 @@ test("coordinate input parsing covers common formats and rejects names", () => {
   assert.equal(parseCoordinateInput("33.9 S 18.4 W")?.lon, -18.4);
   assert.equal(parseCoordinateInput("Rotterdam"), null);
   assert.equal(parseCoordinateInput("91, 4"), null);
+  assert.equal(parseCoordinateInput("-33.9S 18.4E"), null);
+  assert.equal(parseCoordinateInput("33.9N -18.4W"), null);
+  assert.equal(parseCoordinateInput("+51.95N 4.14E"), null);
 });
 
 test("bounding boxes are ordered, validated and capped, never expanded", () => {
@@ -318,7 +353,7 @@ const fixtureFeature = {
     ],
   },
   links: [
-    { rel: "self", href: "https://stac.example/items/1" },
+    { rel: "self", href: "https://stac.dataspace.copernicus.eu/items/1" },
     { rel: "license", href: "https://sentinels.copernicus.eu/legal" },
   ],
   properties: {
@@ -340,7 +375,7 @@ const fixtureFeature = {
       gsd: 10,
     },
     thumbnail: {
-      href: "https://example.invalid/quicklook.jpg",
+      href: "https://catalogue.dataspace.copernicus.eu/quicklook.jpg",
       type: "image/jpeg",
       roles: ["thumbnail", "overview"],
     },
@@ -357,12 +392,60 @@ test("STAC items map only provider-returned fields", () => {
   assert.equal(scene.cloudCoverPct, 18.66);
   assert.equal(scene.resolutionM, 10);
   assert.equal(scene.gridCode, "MGRS-31UFT");
-  assert.equal(scene.thumbnailUrl, "https://example.invalid/quicklook.jpg");
+  assert.equal(
+    scene.thumbnailUrl,
+    "https://catalogue.dataspace.copernicus.eu/quicklook.jpg",
+  );
   assert.equal(scene.licenseUrl, "https://sentinels.copernicus.eu/legal");
   assert.match(scene.attribution, /Copernicus Sentinel data 2024/);
-  const tci = scene.assets.find((asset) => asset.key === "TCI_10m");
-  assert.equal(tci?.requiresAuth, true);
+  // Non-allow-listed asset URLs (including s3://) are not stored.
+  assert.equal(scene.assets.some((asset) => asset.key === "TCI_10m"), false);
   assert.equal(scene.statistics.find((s) => s.label === "water")?.value, 12.5);
+});
+
+test("stored provider URLs are HTTPS-only Copernicus hosts", () => {
+  assert.equal(
+    isAllowedStoredUrl(
+      "https://catalogue.dataspace.copernicus.eu/quicklook.jpg",
+    ),
+    true,
+  );
+  assert.equal(
+    isAllowedStoredUrl("https://sentinels.copernicus.eu/legal"),
+    true,
+  );
+  assert.equal(
+    isAllowedStoredUrl(
+      "https://datahub.creodias.eu/odata/v1/Assets/example/$value",
+    ),
+    true,
+  );
+  assert.equal(isAllowedStoredUrl("http://catalogue.dataspace.copernicus.eu/a"), false);
+  assert.equal(isAllowedStoredUrl("https://evil.example/a"), false);
+  assert.equal(isAllowedStoredUrl("s3://eodata/TCI.jp2"), false);
+});
+
+test("stored geometry is a bounded closed GeoJSON polygon", () => {
+  const polygon = normalizeGeometry({
+    type: "Polygon",
+    coordinates: [[[4, 51], [4.1, 51], [4.1, 51.1], [4, 51.1], [4, 51]]],
+  });
+  assert.ok(polygon);
+  assert.equal(polygon?.type, "Polygon");
+  assert.equal(
+    normalizeGeometry({
+      type: "Polygon",
+      coordinates: [[[4, 51], [4.1, 51], [4.1, 51.1]]],
+    }),
+    null,
+  );
+  assert.equal(
+    normalizeGeometry({
+      type: "Polygon",
+      coordinates: [[[4, 51], [4.1, 51], [4.1, 51.1], [4, 51.1], [4, 91]]],
+    }),
+    null,
+  );
 });
 
 test("provider URLs are restricted to http(s)", () => {
@@ -464,16 +547,17 @@ test("scene checks never claim a measurable tank dimension or liquid level", () 
   assert.equal(date?.status, "PASS");
 });
 
-test("cloud cover thresholds and missing values are distinct", () => {
+test("high tile-level cloud cover warns without failing on target evidence", () => {
   const high = buildSceneChecks({
     requestedDate: "2024-06-28",
     scene: { ...scene, cloudCoverPct: 55 },
     dateMatch: "exact",
   });
-  assert.equal(
-    high.find((check) => check.id === "cloud-cover")?.status,
-    "FAIL",
-  );
+  const cloud = high.find((check) => check.id === "cloud-cover");
+  assert.equal(cloud?.status, "WARN");
+  assert.equal(cloud?.kind, "evidence");
+  assert.match(cloud?.detail ?? "", /tile-level/i);
+  assert.match(cloud?.detail ?? "", /not a measurement over your target/i);
   const missing = buildSceneChecks({
     requestedDate: "2024-06-28",
     scene: { ...scene, cloudCoverPct: null },
@@ -483,6 +567,33 @@ test("cloud cover thresholds and missing values are distinct", () => {
     missing.find((check) => check.id === "cloud-cover")?.status,
     "NOT MEASURABLE",
   );
+});
+
+test("scope limits are classified separately and excluded from overall status", () => {
+  const checks = buildSceneChecks({
+    requestedDate: "2024-06-28",
+    scene,
+    dateMatch: "exact",
+  });
+  const evidence = checks.filter((check) => check.kind === "evidence");
+  const limits = checks.filter((check) => check.kind === "scope-limit");
+  assert.ok(evidence.length > 0, "expected evidence checks");
+  assert.ok(limits.length > 0, "expected scope-limit checks");
+  assert.ok(
+    limits.some((check) => check.id === "internal-liquid-level"),
+    "liquid level must be a scope limit",
+  );
+  const synthetic = [
+    ...evidence.filter(
+      (check) =>
+        check.status === "PASS" || check.status === "NOT VERIFIED",
+    ),
+    {
+      ...limits[0],
+      status: "FAIL" as const,
+    },
+  ];
+  assert.equal(overallStatus(synthetic), "PASS");
 });
 
 test("a user-selected nearby date is warned about, not hidden", () => {
@@ -643,6 +754,14 @@ test("EXIF parser fails safely on non-JPEG and truncated input", () => {
   assert.equal(parseJpegExif(truncated).status, "unreadable");
 });
 
+test("a JPEG without APP1 is absent, not unreadable", () => {
+  // SOI, an APP0 segment with two payload bytes, then EOI.
+  const noApp1 = new Uint8Array([
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xd9,
+  ]).buffer;
+  assert.equal(parseJpegExif(noApp1).status, "absent");
+});
+
 test("file signatures are detected from magic bytes, not extensions", () => {
   assert.equal(
     detectImageSignature(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])),
@@ -708,6 +827,74 @@ test("report contains the required sections and never promotes estimates", () =>
   assert.match(markdown, /NOT MEASURABLE/);
   assert.match(markdown, /Contain[s]? modified Copernicus Sentinel data 2024/);
   assert.doesNotMatch(markdown, /\d+% accuracy/i);
+});
+
+test("report uses stored calculation versions and prints entered inputs", () => {
+  if (!vertical.ok) throw new Error("reference calculation failed");
+  const checks = buildSceneChecks({
+    requestedDate: "2024-07-01",
+    scene,
+    dateMatch: "window",
+  });
+  const project: ResearchProjectRecord = {
+    _id: "project-window",
+    _creationTime: 1,
+    title: "Window project",
+    source: "catalogue",
+    location: {
+      label: "Rotterdam, Netherlands",
+      lat: 51.92,
+      lon: 4.47,
+      bbox: [4.0, 51.8, 4.5, 52.0],
+      source: "OpenStreetMap Nominatim",
+      attribution: "© OpenStreetMap contributors",
+      clamped: false,
+    },
+    requestedDate: "2024-07-01",
+    dateMatch: "window",
+    scene,
+    upload: null,
+    checks,
+    analysis: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const calculation: CalculationRecord = {
+    _id: "calc1",
+    _creationTime: 1,
+    projectId: "project-window",
+    geometry: "vertical-cylinder",
+    geometryLabel: vertical.calculation.geometryLabel,
+    formula: vertical.calculation.formula,
+    unit: "in",
+    diameterInput: 157.4803149606299,
+    secondInput: 196.8503937007874,
+    diameterM: 4,
+    radiusM: 2,
+    heightM: 5,
+    lengthM: null,
+    volume: vertical.calculation.volume,
+    engineVersion: "tank-math/0.9.0",
+    createdAt: 1,
+  };
+  const report = buildResearchReport(
+    project,
+    [calculation],
+    new Date("2026-11-01T00:00:00Z"),
+  );
+  const markdown = reportToMarkdown(report);
+  assert.match(markdown, new RegExp(ENGINE_VERSION.replace(/\./g, "\\.")));
+  assert.match(markdown, /tank-math\/0\.9\.0/);
+  assert.match(markdown, /157\.4803149606299/);
+  assert.match(markdown, /196\.8503937007874/);
+
+  const observations = report.sections.find((section) =>
+    section.heading.startsWith("9."),
+  );
+  assert.ok(observations);
+  const observationsText = observations?.lines.join(" ") ?? "";
+  assert.match(observationsText, /nearby-date window/i);
+  assert.doesNotMatch(observationsText, /requested area and date/i);
 });
 
 /* -------------------------------------------------------------------------- */

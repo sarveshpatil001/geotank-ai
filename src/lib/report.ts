@@ -8,7 +8,7 @@
 
 import { datePartOf, formatCloudCover, formatResolution, platformLabel } from "./catalogue";
 import { formatCoordinate } from "./catalogue";
-import { formatDecimal, formatVolume } from "./tank-geometry";
+import { ENGINE_VERSION, formatDecimal, formatVolume } from "./tank-geometry";
 import type { CalculationRecord, ResearchProjectRecord } from "./research-types";
 import { summarizeChecks } from "./scientific-validation";
 
@@ -182,7 +182,7 @@ export function buildResearchReport(
       "4. Provider response normalised; only fields returned by the provider are retained, absent fields stay empty.",
       "5. Defensive exact-date filter applied; differing dates are reported, never silently substituted.",
       "6. Deterministic validation rules executed and recorded with their evidence basis.",
-      "7. Any tank calculation re-executed by the pinned deterministic engine (tank-math/1.0.0) at save time.",
+      `7. Any tank calculation re-executed by the pinned deterministic engine (${ENGINE_VERSION}) at save time.`,
       "8. AI, when used, produces commentary on the recorded metadata only. It never supplies or alters a number.",
     ],
   });
@@ -191,7 +191,11 @@ export function buildResearchReport(
     heading: "9. Observations",
     lines: scene
       ? [
-          `Catalogue metadata was returned by the provider for the requested area and date.`,
+          project.dateMatch === "window"
+            ? acquiredDate === project.requestedDate
+              ? "Catalogue metadata was returned by the provider within the user-selected nearby-date window; the acquisition date happens to equal the requested date."
+              : "Catalogue metadata was returned by the provider within the user-selected nearby-date window. The acquisition date differs from the requested calendar date and is not presented as an exact-date match; no image was substituted silently."
+            : "Catalogue metadata was returned by the provider for the requested area and exact date.",
           `Provider-reported cloud cover: ${formatCloudCover(scene.cloudCoverPct)}.`,
           "No surface feature, tank geometry or liquid level is claimed from this image. The record is metadata-supported observation only.",
         ]
@@ -206,9 +210,11 @@ export function buildResearchReport(
     lines: calculations.length
       ? calculations.map(
           (calculation) =>
-            `${calculation.geometryLabel}: ${calculation.formula} — internal diameter ${formatVolume(calculation.diameterM, 4)} m, ${
+            `${calculation.geometryLabel}: ${calculation.formula} — entered diameter ${calculation.diameterInput} ${calculation.unit}, entered ${
+              calculation.heightM !== null ? "height" : "length"
+            } ${calculation.secondInput} ${calculation.unit}; converted internal diameter ${formatVolume(calculation.diameterM, 4)} m, ${
               calculation.heightM !== null ? "internal height" : "internal length"
-            } ${formatVolume(calculation.heightM ?? calculation.lengthM ?? 0, 4)} m (entered in ${calculation.unit}), radius ${formatVolume(calculation.radiusM, 6)} m.`,
+            } ${formatVolume(calculation.heightM ?? calculation.lengthM ?? 0, 4)} m, radius ${formatVolume(calculation.radiusM, 6)} m (engine ${calculation.engineVersion}).`,
         )
       : [
           "No tank calculation is attached to this record.",
@@ -277,7 +283,10 @@ export function buildResearchReport(
       `Report generated: ${generatedAt.toISOString()}`,
       `Project created: ${new Date(project.createdAt).toISOString()}`,
       `Project last updated: ${new Date(project.updatedAt).toISOString()}`,
-      `Calculation engine: tank-math/1.0.0 (deterministic, independently tested).`,
+      `Calculation engine: ${ENGINE_VERSION} (deterministic, independently tested).`,
+      calculations.length > 0
+        ? `Stored calculation engine version(s): ${[...new Set(calculations.map((calculation) => calculation.engineVersion))].join(", ")}.`
+        : "No stored calculation engine version applies to this record.",
       `AI analysis: ${
         project.analysis
           ? `${project.analysis.status} using ${project.analysis.model} at ${new Date(project.analysis.ranAt).toISOString()} — commentary only, no numerical authority`

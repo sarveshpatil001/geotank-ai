@@ -1,11 +1,13 @@
 "use node";
 
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { createVlyIntegrations } from "@vly-ai/integrations";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { buildAiPayload } from "./lib/aiPayload";
+import { requireUser } from "./lib/auth";
+import { aiKillSwitchEngaged, enforceAiLimits } from "./lib/limits";
 
 /**
  * AI adapter — commentary only.
@@ -14,8 +16,8 @@ import { action } from "./_generated/server";
  * Adapter: @vly-ai/integrations 0.6.14 `ai.completion`.
  *
  * Hard boundaries:
- *  - The model receives catalogue metadata / upload metadata as text. It never
- *    receives image pixels and never receives exact coordinates.
+ *  - The model receives minimally redacted catalogue/upload metadata as text.
+ *    It never receives image pixels, filenames or exact coordinates.
  *  - The model cannot write validation checks, cannot write calculations, and
  *    its output is stored in a separate field that every screen labels as
  *    model-generated commentary.
@@ -122,18 +124,19 @@ function validateAnalysis(
 export const status = action({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to check AI availability.");
-    }
+    await requireUser(ctx);
     const configured = Boolean(process.env.VLY_INTEGRATION_KEY);
+    const enabled = !aiKillSwitchEngaged();
     return {
       configured,
+      enabled,
       model: MODEL,
       adapter: ADAPTER_VERSION,
       checkedAt: Date.now(),
-      note: configured
-        ? "The deployment has an AI integration key. The model is only called when you press Run AI interpretation, and only metadata text (no image pixels, no exact coordinates) is sent."
+      note: !enabled
+        ? "AI interpretation is disabled by the deployment operator (AI_ENABLED=false)."
+        : configured
+        ? "The deployment has an AI integration key. The model is only called when you press Run AI interpretation, and only minimised metadata text is sent (no image pixels, filenames or exact coordinates)."
         : "No AI integration key is configured for this deployment, so AI commentary is unavailable. Deterministic calculations and validation are unaffected.",
     };
   },
@@ -142,10 +145,17 @@ export const status = action({
 export const interpret = action({
   args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args): Promise<AiInterpretResult> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to run AI interpretation.");
+    const userId = (await requireUser(ctx))._id;
+
+    if (aiKillSwitchEngaged()) {
+      return {
+        status: "blocked",
+        message:
+          "AI interpretation is disabled by the deployment operator. Deterministic validation and calculations are unaffected.",
+      };
     }
+
+    await enforceAiLimits(ctx, userId);
 
     const project = await ctx.runQuery(internal.projects.getOwnedInternal, {
       projectId: args.projectId,
@@ -174,53 +184,7 @@ export const interpret = action({
       };
     }
 
-    const scene = project.scene;
-    const upload = project.upload;
-    const payload = {
-      recordType: project.source,
-      requestedCaptureDate: project.requestedDate,
-      dateMatchSemantics: project.dateMatch,
-      locationLabel: project.location?.label ?? null,
-      geocoderSource: project.location?.source ?? null,
-      catalogue: scene
-        ? {
-            provider: scene.providerName,
-            collection: scene.collectionName,
-            collectionId: scene.collectionId,
-            itemId: scene.itemId,
-            acquiredAtUtc: scene.acquiredAt,
-            publishedAtUtc: scene.publishedAt,
-            platform: scene.platform,
-            orbitState: scene.orbitState,
-            gridCode: scene.gridCode,
-            declaredResolutionMetres: scene.resolutionM,
-            cloudCoverPercent: scene.cloudCoverPct,
-            licenceUrl: scene.licenseUrl,
-            providerSceneStatistics: scene.statistics,
-            quicklookPreviewAvailable: Boolean(scene.thumbnailUrl),
-          }
-        : null,
-      upload: upload
-        ? {
-            filename: upload.filename,
-            declaredMimeType: upload.contentType,
-            sizeBytes: upload.sizeBytes,
-            exifStatus: upload.exifStatus,
-            exifHasGps: upload.exifHasGps,
-            provenance: "user-supplied file, not an authenticated satellite product",
-            clientImageStatistics: upload.clientMetrics,
-          }
-        : null,
-      deterministicChecks: project.checks.map((check) => ({
-        label: check.label,
-        status: check.status,
-        basis: check.basis,
-      })),
-      factsYouMustNotChange: [
-        "Validation statuses above are fixed.",
-        "No volume, dimension or liquid level value is supplied to you; do not produce one.",
-      ],
-    };
+    const payload = buildAiPayload(project);
 
     const client = createVlyIntegrations({
       deploymentToken: process.env.VLY_INTEGRATION_KEY,

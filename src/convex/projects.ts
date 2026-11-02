@@ -1,41 +1,34 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 
 import {
+  CDSE_STAC_BASE,
+  SUPPORTED_COLLECTIONS,
   datePartOf,
+  normalizeStacItem,
   validateBbox,
   validateCaptureDate,
+  type CatalogueScene,
 } from "../lib/catalogue";
 import {
   buildSceneChecks,
   buildUploadChecks,
-  UPLOAD_LIMITS,
-  type UploadQualityMetrics,
 } from "../lib/scientific-validation";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
+  action,
   internalMutation,
   internalQuery,
   mutation,
   query,
-  type MutationCtx,
-  type QueryCtx,
 } from "./_generated/server";
+import { requireUser } from "./lib/auth";
 import {
   analysisValidator,
   locationValidator,
   sceneValidator,
   uploadValidator,
 } from "./validators";
-
-async function requireUserId(ctx: MutationCtx | QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new ConvexError("Sign in to access research records.");
-  }
-  return userId;
-}
 
 function cleanText(value: string, maxLength: number): string {
   let cleaned = "";
@@ -75,118 +68,147 @@ function assertValidLocation(
   return { ...location, bbox: bbox.bbox };
 }
 
-function sanitizeMetrics(value: unknown): UploadQualityMetrics | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const keys = [
-    "width",
-    "height",
-    "sampleWidth",
-    "sampleHeight",
-    "meanLuma",
-    "stdDevLuma",
-    "darkPixelFraction",
-    "brightPixelFraction",
-    "laplacianVariance",
-  ] as const;
-  const numbers: Record<string, number> = {};
-  for (const key of keys) {
-    const number = record[key];
-    if (typeof number !== "number" || !Number.isFinite(number)) return null;
-    numbers[key] = number;
-  }
-  if (
-    numbers.width <= 0 ||
-    numbers.height <= 0 ||
-    numbers.width > 60_000 ||
-    numbers.height > 60_000 ||
-    numbers.sampleWidth <= 0 ||
-    numbers.sampleHeight <= 0 ||
-    numbers.meanLuma < 0 ||
-    numbers.meanLuma > 255 ||
-    numbers.stdDevLuma < 0 ||
-    numbers.darkPixelFraction < 0 ||
-    numbers.darkPixelFraction > 1 ||
-    numbers.brightPixelFraction < 0 ||
-    numbers.brightPixelFraction > 1 ||
-    numbers.laplacianVariance < 0
-  ) {
-    return null;
-  }
-  return numbers as UploadQualityMetrics;
-}
+const STAC_ITEM_TIMEOUT_MS = 25_000;
 
-export const createFromScene = mutation({
+type SceneCreationResult = {
+  id: Id<"researchProjects">;
+  dateMatch: "exact" | "window";
+};
+
+export const createFromScene = action({
   args: {
+    itemId: v.string(),
+    collectionId: v.string(),
     location: locationValidator,
     requestedDate: v.string(),
-    dateMatch: v.union(v.literal("exact"), v.literal("window")),
-    scene: sceneValidator,
   },
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
-    if (args.scene.itemId.length > 400) {
+  handler: async (ctx, args): Promise<SceneCreationResult> => {
+    const userId = (await requireUser(ctx))._id;
+    const hasControlCharacter = [...args.itemId].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 32 || code === 127;
+    });
+    if (
+      args.itemId.length < 1 ||
+      args.itemId.length > 400 ||
+      hasControlCharacter
+    ) {
       throw new ConvexError("The catalogue item identifier is not valid.");
     }
-    if (args.scene.assets.length > 80) {
-      throw new ConvexError(
-        "The catalogue item contains more assets than this app supports.",
-      );
+    const collection = SUPPORTED_COLLECTIONS.find(
+      (entry) => entry.id === args.collectionId,
+    );
+    if (!collection) {
+      throw new ConvexError("The requested catalogue collection is not supported.");
     }
-    if (!Number.isFinite(Date.parse(args.scene.acquiredAt))) {
-      throw new ConvexError(
-        "The catalogue acquisition timestamp could not be parsed.",
-      );
-    }
-
     const dateResult = validateCaptureDate(args.requestedDate);
     if (!dateResult.ok) {
       throw new ConvexError(dateResult.message);
     }
 
-    // Never trust the client's claim that the date matches. The provider
-    // timestamp decides, and a mismatch is recorded as a window selection.
-    const acquiredDate = datePartOf(args.scene.acquiredAt);
+    const url = `${CDSE_STAC_BASE}/collections/${encodeURIComponent(collection.id)}/items/${encodeURIComponent(args.itemId)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), STAC_ITEM_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: "application/geo+json, application/json" },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      const timedOut =
+        error instanceof Error && error.name === "AbortError";
+      throw new ConvexError(
+        timedOut
+          ? "The catalogue did not return this item within 25 seconds. Nothing was stored."
+          : "The catalogue item could not be fetched. Nothing was stored.",
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      throw new ConvexError(
+        `The catalogue could not return this item (HTTP ${response.status}). Nothing was stored.`,
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ConvexError(
+        "The catalogue item response was not valid JSON. Nothing was stored.",
+      );
+    }
+    const scene = normalizeStacItem(payload, collection.id);
+    if (!scene || scene.itemId !== args.itemId) {
+      throw new ConvexError(
+        "The catalogue item did not contain the required metadata. Nothing was stored.",
+      );
+    }
+
+    return await ctx.runMutation(internal.projects.createFromSceneInternal, {
+      userId,
+      location: args.location,
+      requestedDate: dateResult.date,
+      scene,
+    });
+  },
+});
+
+export const createFromSceneInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    location: locationValidator,
+    requestedDate: v.string(),
+    scene: sceneValidator,
+  },
+  handler: async (ctx, args): Promise<SceneCreationResult> => {
+    const dateResult = validateCaptureDate(args.requestedDate);
+    if (!dateResult.ok) {
+      throw new ConvexError(dateResult.message);
+    }
+    const scene = args.scene as unknown as CatalogueScene;
+    if (!Number.isFinite(Date.parse(scene.acquiredAt))) {
+      throw new ConvexError(
+        "The catalogue acquisition timestamp could not be parsed.",
+      );
+    }
+
+    // The provider timestamp decides the match; no client claim is accepted.
+    const acquiredDate = datePartOf(scene.acquiredAt);
     const dateMatch: "exact" | "window" =
       acquiredDate === dateResult.date ? "exact" : "window";
 
     const checks = buildSceneChecks({
       requestedDate: dateResult.date,
-      scene: {
-        ...args.scene,
-        bbox: args.scene.bbox
-          ? ([...args.scene.bbox] as [number, number, number, number])
-          : null,
-        geometry: args.scene.geometry ?? null,
-      },
+      scene,
       dateMatch,
     });
 
-    const location = assertValidLocation(args.location);
-    if (!location) {
+    const validated = assertValidLocation(args.location);
+    if (!validated) {
       throw new ConvexError("A research area is required for a catalogue record.");
     }
+    const location = {
+      ...validated,
+      label: cleanText(validated.label, 240),
+    };
 
     const now = Date.now();
     const title = cleanText(`${location.label} — ${dateResult.date}`, 120);
-
     const id = await ctx.db.insert("researchProjects", {
-      userId,
+      userId: args.userId,
+      uploadStorageId: null,
       title,
       source: "catalogue",
-      location: {
-        ...location,
-        label: cleanText(location.label, 240),
-      },
+      location,
       requestedDate: dateResult.date,
       dateMatch,
       scene: {
-        ...args.scene,
-        bbox: args.scene.bbox
-          ? ([...args.scene.bbox] as [number, number, number, number])
-          : null,
-        geometry: args.scene.geometry ?? null,
+        ...scene,
+        geometry: scene.geometry ?? null,
       },
       upload: null,
       checks,
@@ -196,131 +218,96 @@ export const createFromScene = mutation({
     });
 
     await ctx.runMutation(internal.audit.record, {
-      userId,
+      userId: args.userId,
       action: "project.created",
-      detail: `${dateMatch} catalogue record ${args.scene.itemId.slice(0, 120)} for ${dateResult.date}`,
+      detail: `${dateMatch} catalogue record ${scene.itemId.slice(0, 120)} for ${dateResult.date}`,
     });
 
     return { id, dateMatch };
   },
 });
 
-export const createFromUpload = mutation({
+export const createFromUploadInternal = internalMutation({
   args: {
+    userId: v.id("users"),
     location: v.union(locationValidator, v.null()),
     requestedDate: v.string(),
     upload: uploadValidator,
+    pendingUploadId: v.id("pendingUploads"),
   },
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-
+  handler: async (ctx, args): Promise<{ id: Id<"researchProjects"> }> => {
     const dateResult = validateCaptureDate(args.requestedDate);
     if (!dateResult.ok) {
       throw new ConvexError(dateResult.message);
     }
-
-    if (!/^[a-z0-9]{20,}$/i.test(args.upload.storageId)) {
-      throw new ConvexError("The uploaded file reference is not valid.");
-    }
-    const storageId = args.upload.storageId as Id<"_storage">;
-    const metadata = await ctx.db.system.get(storageId);
-    if (!metadata) {
-      throw new ConvexError(
-        "The uploaded file was not found in storage. Upload it again.",
-      );
-    }
-
-    const contentType = metadata.contentType ?? args.upload.contentType;
-    if (
-      !UPLOAD_LIMITS.allowedTypes.includes(
-        contentType as (typeof UPLOAD_LIMITS.allowedTypes)[number],
+    const duplicate = await ctx.db
+      .query("researchProjects")
+      .withIndex("by_upload_storage", (q) =>
+        q.eq("uploadStorageId", args.upload.storageId),
       )
-    ) {
-      throw new ConvexError(
-        "Only JPEG, PNG and WebP images are accepted by this deployment.",
-      );
+      .first();
+    if (duplicate) {
+      throw new ConvexError("This file has already been attached to a record.");
     }
 
-    const sizeBytes = metadata.size;
-    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
-      throw new ConvexError("The stored file size could not be determined.");
-    }
-    if (sizeBytes > UPLOAD_LIMITS.maxBytes) {
-      throw new ConvexError(
-        `Images must be ${UPLOAD_LIMITS.maxBytes / (1024 * 1024)} MB or smaller.`,
-      );
-    }
-
-    const metrics = sanitizeMetrics(args.upload.clientMetrics);
-    const filename = cleanText(args.upload.filename || "upload", 120);
-
-    const uploadRecord = {
-      storageId: args.upload.storageId,
-      filename,
-      contentType,
-      sizeBytes,
-      width: args.upload.width,
-      height: args.upload.height,
-      sha256: metadata.sha256 ?? args.upload.sha256,
-      signatureOk: args.upload.signatureOk,
-      exifStatus: args.upload.exifStatus,
-      exifDateOriginal: args.upload.exifDateOriginal,
-      exifHasGps: args.upload.exifHasGps,
-      exifMake: args.upload.exifMake,
-      exifModel: args.upload.exifModel,
-      declaredCaptureDate: dateResult.date,
-      clientMetrics: metrics,
-    };
-
+    const upload = args.upload;
     const checks = buildUploadChecks({
       requestedDate: dateResult.date,
       summary: {
-        filename,
-        contentType,
-        sizeBytes,
-        signatureOk: args.upload.signatureOk,
-        sha256: uploadRecord.sha256,
-        exifStatus: args.upload.exifStatus,
-        exifDateOriginal: args.upload.exifDateOriginal,
-        exifHasGps: args.upload.exifHasGps,
-        width: args.upload.width,
-        height: args.upload.height,
+        filename: upload.filename,
+        contentType: upload.contentType,
+        sizeBytes: upload.sizeBytes,
+        signatureOk: upload.signatureOk,
+        sha256: upload.sha256,
+        exifStatus: upload.exifStatus,
+        exifDateOriginal: upload.exifDateOriginal,
+        exifHasGps: upload.exifHasGps,
+        width: upload.width,
+        height: upload.height,
       },
-      quality: metrics,
+      quality: upload.clientMetrics,
     });
 
-    const validatedLocation = assertValidLocation(args.location);
-    const now = Date.now();
-    const location = validatedLocation
-      ? {
-          ...validatedLocation,
-          label: cleanText(validatedLocation.label, 240),
-        }
+    const validated = assertValidLocation(args.location);
+    const location = validated
+      ? { ...validated, label: cleanText(validated.label, 240) }
       : null;
+    const filename = cleanText(upload.filename || "upload", 120);
+    const now = Date.now();
     const title = cleanText(
       `${location?.label ?? filename} — ${dateResult.date} (upload)`,
       120,
     );
 
     const id = await ctx.db.insert("researchProjects", {
-      userId,
+      userId: args.userId,
+      uploadStorageId: upload.storageId,
       title,
       source: "upload",
       location,
       requestedDate: dateResult.date,
       dateMatch: "upload",
       scene: null,
-      upload: uploadRecord,
+      upload: { ...upload, filename },
       checks,
       analysis: null,
       createdAt: now,
       updatedAt: now,
     });
 
+    const pending = await ctx.db.get(args.pendingUploadId);
+    if (
+      pending &&
+      pending.userId === args.userId &&
+      pending.storageId === upload.storageId
+    ) {
+      await ctx.db.delete(pending._id);
+    }
+
     await ctx.runMutation(internal.audit.record, {
-      userId,
+      userId: args.userId,
       action: "project.upload_created",
-      detail: `${contentType}, ${(sizeBytes / 1024).toFixed(0)} KiB, declared date ${dateResult.date}`,
+      detail: `${upload.contentType}, ${(upload.sizeBytes / 1024).toFixed(0)} KiB, declared date ${dateResult.date}`,
     });
 
     return { id };
@@ -330,7 +317,7 @@ export const createFromUpload = mutation({
 export const get = query({
   args: { id: v.id("researchProjects") },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
+    const userId = (await requireUser(ctx))._id;
     const project = await ctx.db.get(args.id);
     if (!project || project.userId !== userId) return null;
 
@@ -347,8 +334,7 @@ export const get = query({
 export const list = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const userId = (await requireUser(ctx))._id;
     const limit = Math.min(Math.max(args.limit ?? 30, 1), 60);
     return await ctx.db
       .query("researchProjects")
@@ -388,7 +374,7 @@ export const setAnalysis = internalMutation({
 export const clearAnalysis = mutation({
   args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
+    const userId = (await requireUser(ctx))._id;
     const project = await ctx.db.get(args.projectId);
     if (!project || project.userId !== userId) {
       throw new ConvexError("Research record not found.");
@@ -408,7 +394,7 @@ export const clearAnalysis = mutation({
 export const remove = mutation({
   args: { id: v.id("researchProjects") },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
+    const userId = (await requireUser(ctx))._id;
     const project = await ctx.db.get(args.id);
     if (!project || project.userId !== userId) {
       throw new ConvexError("Research record not found.");

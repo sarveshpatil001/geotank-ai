@@ -1,5 +1,4 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import {
   CATALOGUE_PROVIDER,
@@ -11,6 +10,7 @@ import {
   classifyCatalogueFailure,
   dayInterval,
   normalizeSearchResponse,
+  normalizeWindowDays,
   validateBbox,
   validateCaptureDate,
   windowInterval,
@@ -19,6 +19,11 @@ import {
 } from "../lib/catalogue";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { requireUser } from "./lib/auth";
+import {
+  enforceImageryHealthLimit,
+  enforceImagerySearchLimit,
+} from "./lib/limits";
 
 /**
  * Copernicus Data Space Ecosystem STAC search.
@@ -70,10 +75,8 @@ export const search = action({
     collection: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ImagerySearchResult> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to search satellite catalogues.");
-    }
+    const userId = (await requireUser(ctx))._id;
+    await enforceImagerySearchLimit(ctx, userId);
 
     const dateResult = validateCaptureDate(args.date);
     if (!dateResult.ok) {
@@ -111,10 +114,25 @@ export const search = action({
       maxCloudPct = args.maxCloudPct;
     }
 
+    let windowDays: number | undefined;
+    if (args.windowDays !== undefined) {
+      const normalized = normalizeWindowDays(args.windowDays);
+      if (normalized === null) {
+        return {
+          status: "invalid",
+          message:
+            "The nearby-date window must be a finite number between 1 and 15 days.",
+        };
+      }
+      windowDays = normalized;
+    }
+
     const mode: "exact" | "window" =
-      args.windowDays !== undefined ? "window" : "exact";
+      windowDays !== undefined ? "window" : "exact";
     const window =
-      mode === "window" ? windowInterval(dateResult.date, args.windowDays!) : null;
+      windowDays !== undefined
+        ? windowInterval(dateResult.date, windowDays)
+        : null;
     const interval = window ? window.interval : dayInterval(dateResult.date);
 
     const body = buildSearchBody({
@@ -241,10 +259,8 @@ export const search = action({
 export const health = action({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to run a connectivity check.");
-    }
+    const userId = (await requireUser(ctx))._id;
+    await enforceImageryHealthLimit(ctx, userId);
     const checkedAt = Date.now();
     const started = Date.now();
     const controller = new AbortController();

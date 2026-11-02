@@ -1,15 +1,15 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 
 import {
   computeCapacity,
-  LENGTH_UNITS,
+  isLengthUnit,
   TANK_GEOMETRIES,
   type LengthUnit,
   type TankGeometry,
 } from "../lib/tank-geometry";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
+import { requireUser } from "./lib/auth";
 
 /**
  * Calculations are re-executed here with the shared deterministic engine. The
@@ -40,16 +40,13 @@ export const save = mutation({
     projectId: v.optional(v.id("researchProjects")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to save a calculation.");
-    }
+    const userId = (await requireUser(ctx))._id;
 
     const geometry = TANK_GEOMETRIES[args.geometry as TankGeometry];
     if (!geometry) {
       return { status: "invalid" as const, message: "Unsupported tank geometry." };
     }
-    if (!(args.unit in LENGTH_UNITS)) {
+    if (!isLengthUnit(args.unit)) {
       return { status: "invalid" as const, message: "Unsupported length unit." };
     }
 
@@ -108,8 +105,7 @@ export const save = mutation({
 export const list = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const userId = (await requireUser(ctx))._id;
     const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
     return await ctx.db
       .query("calculations")
@@ -122,8 +118,7 @@ export const list = query({
 export const listForProject = query({
   args: { projectId: v.id("researchProjects") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const userId = (await requireUser(ctx))._id;
     const rows = await ctx.db
       .query("calculations")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -135,10 +130,7 @@ export const listForProject = query({
 export const remove = mutation({
   args: { id: v.id("calculations") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to delete a calculation.");
-    }
+    const userId = (await requireUser(ctx))._id;
     const calculation = await ctx.db.get(args.id);
     if (!calculation || calculation.userId !== userId) {
       throw new ConvexError("Calculation not found.");

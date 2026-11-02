@@ -1,8 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, mutation, query } from "./_generated/server";
+import { requireUser } from "./lib/auth";
 
 /**
  * Per-user settings and data controls. Defaults are returned without writing
@@ -16,8 +16,7 @@ export const DEFAULT_SETTINGS = {
 export const get = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return { ...DEFAULT_SETTINGS, persisted: false };
+    const userId = (await requireUser(ctx))._id;
     const settings = await ctx.db
       .query("userSettings")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -44,10 +43,7 @@ export const update = mutation({
     aiEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to change settings.");
-    }
+    const userId = (await requireUser(ctx))._id;
     const existing = await ctx.db
       .query("userSettings")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -74,8 +70,7 @@ export const update = mutation({
 export const exportData = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const userId = (await requireUser(ctx))._id;
 
     const projects = await ctx.db
       .query("researchProjects")
@@ -108,10 +103,7 @@ export const exportData = query({
 export const deleteAll = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new ConvexError("Sign in to delete your data.");
-    }
+    const userId = (await requireUser(ctx))._id;
 
     let projectsDeleted = 0;
     let imagesDeleted = 0;

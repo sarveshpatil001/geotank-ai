@@ -2,11 +2,43 @@ import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+const baseCsp = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site ws://localhost:* http://localhost:* wss://*.vly.sh",
+  "frame-src 'none'",
+  "form-action 'self'",
+].join("; ");
+
+// The preview must stay embeddable for the Vly toolbar; published builds deny
+// framing through public/_headers and the preview header below.
+const devCsp = `${baseCsp}; frame-ancestors 'self' https://*.vly.sh https://*.freebuff.com`;
+const previewCsp = `${baseCsp}; frame-ancestors 'none'`;
+
+function immutableAssetCache(): Plugin {
+  return {
+    name: "geotank-immutable-asset-cache",
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.startsWith("/assets/")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+        next();
+      });
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), vlyPlugin(), tailwindcss()],
+  plugins: [react(), vlyPlugin(), tailwindcss(), immutableAssetCache()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -96,9 +128,22 @@ export default defineConfig({
     // Bind to all interfaces so the browser runtime's server-ready event fires.
     host: true,
     port: 5173,
+    headers: {
+      "Content-Security-Policy": devCsp,
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    },
     // Keep HMR on, but disable full-screen error overlay
     hmr: {
       overlay: false,
+    },
+  },
+  preview: {
+    headers: {
+      "Content-Security-Policy": previewCsp,
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
     },
   },
 });

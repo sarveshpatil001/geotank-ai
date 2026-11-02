@@ -1,7 +1,7 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { internalMutation, query } from "./_generated/server";
+import { requireUser } from "./lib/auth";
 
 /**
  * Privacy-conscious activity log. Records what happened to a research record
@@ -28,8 +28,7 @@ export const record = internalMutation({
 export const recent = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const userId = (await requireUser(ctx))._id;
     const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
     return await ctx.db
       .query("auditLog")

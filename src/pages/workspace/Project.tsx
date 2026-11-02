@@ -291,16 +291,14 @@ export default function ProjectPage() {
       status: scene
         ? scene.cloudCoverPct === null
           ? "NOT MEASURABLE"
-          : scene.cloudCoverPct > 30
-            ? "FAIL"
-            : scene.cloudCoverPct > 10
-              ? "WARN"
-              : "PASS"
+          : scene.cloudCoverPct > 10
+            ? "WARN"
+            : "PASS"
         : upload?.clientMetrics
           ? "WARN"
           : "NOT MEASURABLE",
       detail: scene
-        ? `Provider cloud cover: ${formatCloudCover(scene.cloudCoverPct)}; scene classification statistics are tile-level only.`
+        ? `Provider-reported tile-level cloud cover: ${formatCloudCover(scene.cloudCoverPct)}. This describes the scene tile, not your target.`
         : upload?.clientMetrics
           ? "Heuristic luma statistics computed in the browser. They are not a radiometric assessment."
           : "No pixel statistics are stored for this upload.",

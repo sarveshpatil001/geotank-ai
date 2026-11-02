@@ -86,6 +86,16 @@ export type LengthResult =
 
 const DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
+export function isLengthUnit(value: string): value is LengthUnit {
+  // Object.hasOwn is ES2022; this project targets ES2020 libraries while the
+  // browser build target remains modern.
+  return (
+    Object as unknown as {
+      hasOwn: (target: object, key: PropertyKey) => boolean;
+    }
+  ).hasOwn(LENGTH_UNITS, value);
+}
+
 const FIELD_NAMES: Record<DimensionField, string> = {
   diameter: "internal diameter",
   radius: "internal radius",
@@ -358,10 +368,33 @@ export function estimateMassFromDensity(
   volumeM3: number,
   densityInput: string | number,
 ): MassOutcome {
-  const density =
-    typeof densityInput === "number"
-      ? densityInput
-      : Number(String(densityInput ?? "").trim());
+  let density: number;
+  if (typeof densityInput === "number") {
+    density = densityInput;
+  } else {
+    const trimmed = String(densityInput ?? "").trim();
+    if (!trimmed) {
+      return {
+        ok: false,
+        problem: {
+          field: "density",
+          code: "REQUIRED",
+          message: "Enter the liquid density.",
+        },
+      };
+    }
+    if (!DECIMAL_PATTERN.test(trimmed)) {
+      return {
+        ok: false,
+        problem: {
+          field: "density",
+          code: "NOT_A_NUMBER",
+          message: "The liquid density must be a decimal number.",
+        },
+      };
+    }
+    density = Number(trimmed);
+  }
   if (!Number.isFinite(density)) {
     return {
       ok: false,

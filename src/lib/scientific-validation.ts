@@ -24,8 +24,11 @@ export type EvidenceBasis =
   | "client-computed image statistic"
   | "independent verification absent";
 
+export type CheckKind = "evidence" | "scope-limit";
+
 export type ValidationCheck = {
   id: string;
+  kind: CheckKind;
   label: string;
   status: CheckStatus;
   detail: string;
@@ -107,7 +110,7 @@ export const STATUS_GLOSSARY: { status: CheckStatus; meaning: string }[] = [
 ];
 
 const CLOUD_RULE =
-  "provider eo:cloud_cover: ≤ 10% pass, ≤ 30% warn, > 30% fail, missing not measurable";
+  "provider eo:cloud_cover tile statistic: ≤ 10% pass, ≤ 30% warn, > 30% warn with a tile-level limitation, missing not measurable";
 
 /* -------------------------------------------------------------------------- */
 /* Catalogue-backed records                                                    */
@@ -131,6 +134,7 @@ export function buildSceneChecks({
     dateMatch === "exact"
       ? {
           id: "acquisition-date",
+          kind: "evidence",
           label: "Acquisition date matches the requested capture date",
           status: "PASS",
           detail: `Requested ${requestedDate}. Provider acquisition timestamp is ${scene.acquiredAt} (UTC), which falls on ${acquiredDate}. The processing date is not used as the capture date.`,
@@ -139,6 +143,7 @@ export function buildSceneChecks({
         }
       : {
           id: "acquisition-date",
+          kind: "evidence",
           label: "Acquisition date differs from the requested date",
           status: "WARN",
           detail: `You requested ${requestedDate} and selected a nearby-date result. Provider acquisition timestamp is ${scene.acquiredAt} (UTC). No image was substituted without your selection.`,
@@ -149,6 +154,7 @@ export function buildSceneChecks({
 
   checks.push({
     id: "catalogue-provenance",
+    kind: "evidence",
     label: "Catalogue provenance is recorded",
     status: "PASS",
     detail: `${scene.providerName} (${scene.collectionName}) returned item ${scene.itemId}. The metadata below is the provider's response, not reconstructed.`,
@@ -160,6 +166,7 @@ export function buildSceneChecks({
     scene.resolutionM !== null
       ? {
           id: "resolution-recorded",
+          kind: "evidence",
           label: "Spatial resolution is reported by the provider",
           status: "PASS",
           detail: `Provider-declared resolution: ${formatResolution(scene.resolutionM)}.`,
@@ -168,6 +175,7 @@ export function buildSceneChecks({
         }
       : {
           id: "resolution-recorded",
+          kind: "evidence",
           label: "Spatial resolution is absent",
           status: "NOT MEASURABLE",
           detail:
@@ -180,6 +188,7 @@ export function buildSceneChecks({
   const gsd = scene.resolutionM;
   checks.push({
     id: "tank-scale-measurement",
+    kind: "scope-limit",
     label: "Tank-level dimensional measurement",
     status: "NOT MEASURABLE",
     detail:
@@ -194,6 +203,7 @@ export function buildSceneChecks({
   if (scene.cloudCoverPct === null) {
     checks.push({
       id: "cloud-cover",
+      kind: "evidence",
       label: "Cloud cover assessment",
       status: "NOT MEASURABLE",
       detail:
@@ -204,27 +214,30 @@ export function buildSceneChecks({
   } else if (scene.cloudCoverPct > 30) {
     checks.push({
       id: "cloud-cover",
-      label: "Cloud cover is high",
-      status: "FAIL",
-      detail: `Provider-reported cloud cover is ${formatCloudCover(scene.cloudCoverPct)}, above the 30% suitability threshold. The scene is not suitable for surface observation.`,
+      kind: "evidence",
+      label: "Tile-level cloud cover is high",
+      status: "WARN",
+      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}, above the 30% suitability threshold. This is a scene-tile statistic, not a measurement over your target; inspect the quicklook before relying on this item.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
   } else if (scene.cloudCoverPct > 10) {
     checks.push({
       id: "cloud-cover",
-      label: "Partial cloud cover",
+      kind: "evidence",
+      label: "Partial tile-level cloud cover",
       status: "WARN",
-      detail: `Provider-reported cloud cover is ${formatCloudCover(scene.cloudCoverPct)}. Parts of the scene may be obscured or shadowed.`,
+      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}. Parts of the scene tile may be obscured or shadowed; this is not a target-specific measurement.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
   } else {
     checks.push({
       id: "cloud-cover",
-      label: "Cloud cover within the usable threshold",
+      kind: "evidence",
+      label: "Tile-level cloud cover within the usable threshold",
       status: "PASS",
-      detail: `Provider-reported cloud cover is ${formatCloudCover(scene.cloudCoverPct)}.`,
+      detail: `Provider-reported tile-level cloud cover is ${formatCloudCover(scene.cloudCoverPct)}. It describes the scene tile, not your specific target.`,
       basis: "provider metadata",
       rule: CLOUD_RULE,
     });
@@ -237,6 +250,7 @@ export function buildSceneChecks({
     shadowStat
       ? {
           id: "cloud-shadow",
+          kind: "evidence",
           label: "Cloud shadow classified by the provider",
           status: shadowStat.value > 2 ? "WARN" : "PASS",
           detail: `Provider scene classification reports ${shadowStat.value}% cloud shadow over the scene tile. This is a tile-level statistic, not an assessment of your target.`,
@@ -245,6 +259,7 @@ export function buildSceneChecks({
         }
       : {
           id: "cloud-shadow",
+          kind: "evidence",
           label: "Cloud shadow assessment",
           status: "NOT MEASURABLE",
           detail:
@@ -256,6 +271,7 @@ export function buildSceneChecks({
 
   checks.push({
     id: "georeferencing",
+    kind: "scope-limit",
     label: "Georeferencing and measurement control",
     status: "WARN",
     detail:
@@ -266,6 +282,7 @@ export function buildSceneChecks({
 
   checks.push({
     id: "internal-liquid-level",
+    kind: "scope-limit",
     label: "Internal liquid level",
     status: "NOT MEASURABLE",
     detail:
@@ -276,6 +293,7 @@ export function buildSceneChecks({
 
   checks.push({
     id: "liquid-inventory",
+    kind: "scope-limit",
     label: "Liquid inventory",
     status: "NOT APPLICABLE",
     detail:
@@ -288,6 +306,7 @@ export function buildSceneChecks({
     scene.thumbnailUrl
       ? {
           id: "preview-availability",
+          kind: "evidence",
           label: "Provider preview available",
           status: "PASS",
           detail:
@@ -297,6 +316,7 @@ export function buildSceneChecks({
         }
       : {
           id: "preview-availability",
+          kind: "evidence",
           label: "Provider preview unavailable",
           status: "NOT APPLICABLE",
           detail:
@@ -308,6 +328,7 @@ export function buildSceneChecks({
 
   checks.push({
     id: "licence",
+    kind: "evidence",
     label: "Licence and attribution",
     status: "PASS",
     detail: `${scene.attribution}. ${scene.licenseUrl}`,
@@ -366,10 +387,11 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-signature",
+    kind: "evidence",
     label: "File signature matches an allowed image format",
     status: summary.signatureOk ? "PASS" : "FAIL",
     detail: summary.signatureOk
-      ? `Magic bytes match ${summary.contentType}. The file was decoded by the browser before upload.`
+      ? `The server matched the file's magic bytes to ${summary.contentType}.`
       : "The file signature did not match the declared image type. The file should not be analysed.",
     basis: "deterministic rule",
     rule: "JPEG / PNG / WebP magic-byte check",
@@ -377,6 +399,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-size",
+    kind: "evidence",
     label: "File size within the configured limit",
     status:
       summary.sizeBytes > 0 && summary.sizeBytes <= UPLOAD_LIMITS.maxBytes
@@ -394,15 +417,17 @@ export function buildUploadChecks({
     width !== null && height !== null
       ? {
           id: "upload-dimensions",
+          kind: "evidence",
           label: "Pixel dimensions are sufficient for visual review",
           status:
             Math.min(width, height) >= minPixels ? "PASS" : "WARN",
-          detail: `Decoded dimensions: ${width} × ${height} px (short edge ${Math.min(width, height)} px, threshold ${minPixels} px).`,
-          basis: "client-computed image statistic",
+          detail: `Server-read header dimensions: ${width} × ${height} px (short edge ${Math.min(width, height)} px, threshold ${minPixels} px).`,
+          basis: "deterministic rule",
           rule: `min(width, height) ≥ ${minPixels} px`,
         }
       : {
           id: "upload-dimensions",
+          kind: "evidence",
           label: "Pixel dimensions could not be decoded",
           status: "FAIL",
           detail: "The image could not be decoded, so its size is unknown.",
@@ -413,6 +438,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-provenance",
+    kind: "evidence",
     label: "Imagery source and provenance",
     status: "NOT VERIFIED",
     detail:
@@ -429,16 +455,18 @@ export function buildUploadChecks({
     summary.exifStatus === "present" && summary.exifDateOriginal
       ? {
           id: "upload-capture-date",
-          label: "Capture date corroborated by embedded EXIF",
+          kind: "evidence",
+          label: "Entered date agrees with embedded EXIF DateTimeOriginal",
           status: exifMatch ? "PASS" : "FAIL",
           detail: exifMatch
             ? `Embedded DateTimeOriginal ${summary.exifDateOriginal} agrees with the date you entered. EXIF is metadata inside the file and can be edited, so this is corroboration, not proof.`
             : `Embedded DateTimeOriginal ${summary.exifDateOriginal} conflicts with the date you entered (${requestedDate}). The declared capture date is not supported by the file.`,
-          basis: "client-computed image statistic",
+          basis: "deterministic rule",
           rule: "EXIF DateTimeOriginal date == user-entered capture date",
         }
       : {
           id: "upload-capture-date",
+          kind: "evidence",
           label: "Capture date is declared by the user",
           status: "NOT VERIFIED",
           detail:
@@ -454,15 +482,17 @@ export function buildUploadChecks({
     summary.exifHasGps
       ? {
           id: "upload-geolocation",
+          kind: "evidence",
           label: "Embedded GPS position",
           status: "WARN",
           detail:
             "The file contains EXIF GPS coordinates. They are recorded for transparency but are not used to place the research request, and they are editable metadata.",
-          basis: "client-computed image statistic",
+          basis: "deterministic rule",
           rule: "EXIF GPS IFD present",
         }
       : {
           id: "upload-geolocation",
+          kind: "evidence",
           label: "Image position",
           status: "NOT VERIFIED",
           detail:
@@ -474,6 +504,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-ground-scale",
+    kind: "scope-limit",
     label: "Ground sample distance",
     status: "NOT MEASURABLE",
     detail:
@@ -484,6 +515,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-tank-measurement",
+    kind: "scope-limit",
     label: "Image-derived tank measurement",
     status: "NOT MEASURABLE",
     detail:
@@ -494,6 +526,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "upload-quality",
+    kind: "evidence",
     label: "Client-computed image statistics",
     status: quality ? "PASS" : "NOT MEASURABLE",
     detail: quality
@@ -505,6 +538,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "internal-liquid-level",
+    kind: "scope-limit",
     label: "Internal liquid level",
     status: "NOT MEASURABLE",
     detail:
@@ -515,6 +549,7 @@ export function buildUploadChecks({
 
   checks.push({
     id: "liquid-inventory",
+    kind: "scope-limit",
     label: "Liquid inventory",
     status: "NOT APPLICABLE",
     detail:
@@ -544,6 +579,7 @@ export function buildCalculationChecks(
     return [
       {
         id: "capacity-calculation",
+        kind: "evidence",
         label: "Theoretical capacity",
         status: "NOT APPLICABLE",
         detail:
@@ -556,6 +592,7 @@ export function buildCalculationChecks(
   return [
     {
       id: "capacity-calculation",
+      kind: "evidence",
       label: "Calculation executed by the deterministic engine",
       status: "PASS",
       detail: `${calculation.geometryLabel}: ${calculation.volumeM3.toFixed(6)} m³ computed by ${calculation.engineVersion}. IEEE-754 double precision; reference values are checked by the repository test script.`,
@@ -564,6 +601,7 @@ export function buildCalculationChecks(
     },
     {
       id: "capacity-dimensions",
+      kind: "scope-limit",
       label: "Physical dimensions are independently verified",
       status: "NOT VERIFIED",
       detail:
@@ -573,6 +611,7 @@ export function buildCalculationChecks(
     },
     {
       id: "capacity-vs-inventory",
+      kind: "scope-limit",
       label: "Measured liquid inventory",
       status: "NOT MEASURABLE",
       detail:
@@ -622,9 +661,12 @@ export function summarizeChecks(checks: ValidationCheck[]): ValidationSummary {
 }
 
 export function overallStatus(checks: ValidationCheck[]): CheckStatus {
-  if (checks.some((check) => check.status === "FAIL")) return "FAIL";
-  if (checks.some((check) => check.status === "WARN")) return "WARN";
-  if (checks.some((check) => check.status === "NOT MEASURABLE"))
+  // Scope limits describe what the tool cannot conclude; they must not make an
+  // otherwise supported record look failed or unmeasurable.
+  const evidence = checks.filter((check) => check.kind !== "scope-limit");
+  if (evidence.some((check) => check.status === "FAIL")) return "FAIL";
+  if (evidence.some((check) => check.status === "WARN")) return "WARN";
+  if (evidence.some((check) => check.status === "NOT MEASURABLE"))
     return "NOT MEASURABLE";
   return "PASS";
 }

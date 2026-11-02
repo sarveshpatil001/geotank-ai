@@ -204,7 +204,7 @@ function dmsToDecimal(
 }
 
 export type ParsedExif = {
-  status: "present" | "unreadable";
+  status: "present" | "absent" | "unreadable";
   dateTimeOriginal: string | null;
   gps: ExifGps | null;
   make: string | null;
@@ -240,6 +240,15 @@ export function parseJpegExif(buffer: ArrayBuffer): ParsedExif {
       const segmentLength = view.getUint16(offset + 2, false);
       if (segmentLength < 2) break;
       const dataStart = offset + 4;
+      if (dataStart + segmentLength > view.byteLength) {
+        return {
+          ...empty,
+          note:
+            marker === 0xe1
+              ? "The APP1 EXIF segment is truncated."
+              : "A JPEG segment claims more bytes than the file contains.",
+        };
+      }
       if (marker === 0xe1) {
         const hasExifHeader =
           dataStart + 6 <= view.byteLength &&
@@ -258,7 +267,21 @@ export function parseJpegExif(buffer: ArrayBuffer): ParsedExif {
     }
 
     if (tiffStart === null) {
-      return { ...empty, note: "No APP1 EXIF segment was found." };
+      // A JPEG can end before a declared segment even starts (for example a
+      // five-byte SOI + APP1 prefix). That is malformed, not "no EXIF".
+      if (
+        view.byteLength >= 4 &&
+        view.getUint8(2) === 0xff &&
+        view.getUint8(3) === 0xe1 &&
+        view.byteLength < 8
+      ) {
+        return { ...empty, note: "The APP1 EXIF segment is truncated." };
+      }
+      return {
+        ...empty,
+        status: "absent",
+        note: "No APP1 EXIF segment was found in this JPEG.",
+      };
     }
 
     const byteOrder =
@@ -358,8 +381,8 @@ export function parseJpegExif(buffer: ArrayBuffer): ParsedExif {
       model,
       orientation,
       note: gps
-        ? "EXIF present. Capture time and GPS are editable metadata, not proof of provenance."
-        : "EXIF present. Capture metadata is editable, not proof of provenance.",
+        ? "EXIF present. DateTimeOriginal and GPS are editable metadata, not proof of capture time or provenance."
+        : "EXIF present. DateTimeOriginal is editable metadata, not proof of capture time or provenance.",
     };
   } catch {
     return empty;

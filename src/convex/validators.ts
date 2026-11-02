@@ -15,6 +15,10 @@ export const volumeValidator = v.object({
 
 export const checkValidator = v.object({
   id: v.string(),
+  // Optional for records written before the evidence/scope-limit split.
+  kind: v.optional(
+    v.union(v.literal("evidence"), v.literal("scope-limit")),
+  ),
   label: v.string(),
   status: v.union(
     v.literal("PASS"),
@@ -54,6 +58,24 @@ export const sceneStatisticValidator = v.object({
   value: v.number(),
 });
 
+// Only bounded GeoJSON shapes are stored. Coordinate/ring/polygon counts and
+// string lengths are additionally capped by normalizeStacItem before insert.
+const positionValidator = v.array(v.number());
+const ringValidator = v.array(positionValidator);
+const polygonCoordinatesValidator = v.array(ringValidator);
+const multiPolygonCoordinatesValidator = v.array(polygonCoordinatesValidator);
+
+export const geometryValidator = v.union(
+  v.object({
+    type: v.literal("Polygon"),
+    coordinates: polygonCoordinatesValidator,
+  }),
+  v.object({
+    type: v.literal("MultiPolygon"),
+    coordinates: multiPolygonCoordinatesValidator,
+  }),
+);
+
 export const sceneValidator = v.object({
   providerId: v.string(),
   providerName: v.string(),
@@ -69,7 +91,7 @@ export const sceneValidator = v.object({
   resolutionM: v.union(v.number(), v.null()),
   cloudCoverPct: v.union(v.number(), v.null()),
   bbox: v.union(v.array(v.number()), v.null()),
-  geometry: v.optional(v.any()),
+  geometry: v.union(geometryValidator, v.null()),
   thumbnailUrl: v.union(v.string(), v.null()),
   selfUrl: v.union(v.string(), v.null()),
   licenseUrl: v.string(),
@@ -134,6 +156,7 @@ export const analysisValidator = v.object({
 
 export const researchProjectFields = {
   userId: v.id("users"),
+  uploadStorageId: v.optional(v.union(v.string(), v.null())),
   title: v.string(),
   source: v.union(v.literal("catalogue"), v.literal("upload")),
   location: v.union(locationValidator, v.null()),

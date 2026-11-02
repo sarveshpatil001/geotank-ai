@@ -73,9 +73,10 @@ export default function ResearchPage() {
   const navigate = useNavigate();
   const resolveLocation = useAction(api.geocoding.resolveLocation);
   const searchImagery = useAction(api.imagery.search);
-  const createFromScene = useMutation(api.projects.createFromScene);
-  const createFromUpload = useMutation(api.projects.createFromUpload);
+  const createFromScene = useAction(api.projects.createFromScene);
+  const finalizeUpload = useAction(api.upload.finalizeUpload);
   const generateUploadUrl = useMutation(api.files.generateUploadUrl);
+  const registerUpload = useMutation(api.files.registerUpload);
 
   const [locationQuery, setLocationQuery] = useState("");
   const [candidates, setCandidates] = useState<LocationCandidate[] | null>(null);
@@ -216,12 +217,11 @@ export default function ResearchPage() {
     setCreatingItem(scene.itemId);
     setCreateError(null);
     try {
-      const acquiredDate = datePartOf(scene.acquiredAt);
       const created = await createFromScene({
+        itemId: scene.itemId,
+        collectionId: scene.collectionId,
         location: selected,
         requestedDate: result.requestedDate,
-        dateMatch: acquiredDate === result.requestedDate ? "exact" : "window",
-        scene,
       });
       navigate(`/workspace/project/${created.id}`);
     } catch (error) {
@@ -318,27 +318,19 @@ export default function ResearchPage() {
       if (!body.storageId) {
         throw new Error("Storage did not return a file identifier.");
       }
-      setUploadStage("Recording provenance and validation checks…");
-      const created = await createFromUpload({
+      setUploadStage("Registering the upload with the server…");
+      const pending = await registerUpload({
+        storageId: body.storageId,
+        filename: prepared.file.name,
+        contentType: prepared.detectedType,
+      });
+      setUploadStage(
+        "Server is re-reading the file, dimensions, metadata and checksum…",
+      );
+      const created = await finalizeUpload({
+        uploadId: pending.uploadId,
         location: selected,
         requestedDate: dateResult.date,
-        upload: {
-          storageId: body.storageId,
-          filename: prepared.file.name,
-          contentType: prepared.detectedType,
-          sizeBytes: prepared.file.size,
-          width: prepared.quality.width,
-          height: prepared.quality.height,
-          sha256: prepared.sha256,
-          signatureOk: true,
-          exifStatus: prepared.exif.status,
-          exifDateOriginal: prepared.exif.dateTimeOriginal,
-          exifHasGps: prepared.exif.gps !== null,
-          exifMake: prepared.exif.make,
-          exifModel: prepared.exif.model,
-          declaredCaptureDate: dateResult.date,
-          clientMetrics: prepared.quality,
-        },
       });
       navigate(`/workspace/project/${created.id}`);
     } catch (error) {

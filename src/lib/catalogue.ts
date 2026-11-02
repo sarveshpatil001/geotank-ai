@@ -49,6 +49,10 @@ export type CatalogueAsset = {
 };
 
 export type SceneStatistic = { label: string; value: number };
+export type GeoPosition = [number, number];
+export type SceneGeometry =
+  | { type: "Polygon"; coordinates: GeoPosition[][] }
+  | { type: "MultiPolygon"; coordinates: GeoPosition[][][] };
 
 export type CatalogueScene = {
   providerId: string;
@@ -65,7 +69,7 @@ export type CatalogueScene = {
   resolutionM: number | null;
   cloudCoverPct: number | null;
   bbox: [number, number, number, number] | null;
-  geometry: unknown | null;
+  geometry: SceneGeometry | null;
   thumbnailUrl: string | null;
   selfUrl: string | null;
   licenseUrl: string;
@@ -82,7 +86,20 @@ export type GeoBbox = [number, number, number, number];
 
 export type DateResult =
   | { ok: true; date: string }
-  | { ok: false; code: "REQUIRED" | "FORMAT" | "INVALID_DATE" | "FUTURE_DATE"; message: string };
+  | {
+      ok: false;
+      code:
+        | "REQUIRED"
+        | "FORMAT"
+        | "INVALID_DATE"
+        | "FUTURE_DATE"
+        | "BEFORE_SUPPORTED";
+      message: string;
+    };
+
+/** Sentinel-2A launch; catalogue searches for an earlier date cannot return
+ *  this app's supported collection. */
+export const SENTINEL2_FIRST_CAPTURE_DATE = "2015-06-23";
 
 export function validateCaptureDate(
   input: string,
@@ -130,6 +147,14 @@ export function validateCaptureDate(
         "A capture date in the future cannot have acquired imagery. Choose today or earlier.",
     };
   }
+  const firstSupported = Date.UTC(2015, 5, 23);
+  if (utc < firstSupported) {
+    return {
+      ok: false,
+      code: "BEFORE_SUPPORTED",
+      message: `Sentinel-2 imagery is not available before ${SENTINEL2_FIRST_CAPTURE_DATE}. Choose a later capture date.`,
+    };
+  }
   return { ok: true, date: trimmed };
 }
 
@@ -147,8 +172,17 @@ export type WindowInterval = {
 };
 
 /** Explicitly user-chosen nearby-date window. Never used silently. */
-export function windowInterval(date: string, windowDays: number): WindowInterval {
-  const days = Math.min(Math.max(Math.trunc(windowDays), 1), 15);
+export function normalizeWindowDays(windowDays: number): number | null {
+  if (!Number.isFinite(windowDays)) return null;
+  return Math.min(Math.max(Math.trunc(windowDays), 1), 15);
+}
+
+export function windowInterval(
+  date: string,
+  windowDays: number,
+): WindowInterval | null {
+  const days = normalizeWindowDays(windowDays);
+  if (days === null) return null;
   const center = Date.parse(`${date}T12:00:00Z`);
   const start = new Date(center - days * 86_400_000);
   const end = new Date(center + days * 86_400_000);
@@ -200,11 +234,15 @@ export function parseCoordinateInput(input: string): CoordinateResult | null {
   if (tokens.length !== 2) return null;
 
   const parseToken = (token: string, axis: "lat" | "lon") => {
-    const match = token.match(/^([+-]?\d+(?:\.\d+)?)([NSEWnsew])?$/);
+    const match = token.match(/^([+-]?)(\d+(?:\.\d+)?)([NSEWnsew])?$/);
     if (!match) return null;
-    const value = Number(match[1]);
+    const explicitSign = match[1];
+    const value = Number(match[2]);
     if (!Number.isFinite(value)) return null;
-    const hemisphere = match[2]?.toUpperCase();
+    const hemisphere = match[3]?.toUpperCase();
+    // Do not mix a numeric sign with a hemisphere: "-33.9S" and "33.9N" are
+    // unambiguous only if one convention is used. Reject the ambiguity.
+    if (hemisphere && explicitSign) return null;
     if (axis === "lat" && hemisphere && !"NS".includes(hemisphere)) return null;
     if (axis === "lon" && hemisphere && !"EW".includes(hemisphere)) return null;
     const signed =
@@ -342,16 +380,107 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** Only http(s) URLs are allowed into an href/src attribute. */
-function readHttpUrl(value: unknown): string | null {
-  const raw = readString(value);
-  if (!raw) return null;
+const STORED_URL_HOSTS = [
+  "dataspace.copernicus.eu",
+  "sentinels.copernicus.eu",
+  // CDSE returns its rendered quicklook from this Copernicus data hub.
+  "datahub.creodias.eu",
+] as const;
+
+/** Stored external URLs are HTTPS-only and limited to Copernicus hosts. */
+export function isAllowedStoredUrl(value: string): boolean {
   try {
-    const url = new URL(raw);
-    return url.protocol === "http:" || url.protocol === "https:" ? raw : null;
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    return STORED_URL_HOSTS.some(
+      (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+    );
   } catch {
+    return false;
+  }
+}
+
+function readStoredUrl(value: unknown): string | null {
+  const raw = readString(value);
+  if (!raw || raw.length > 1_000) return null;
+  return isAllowedStoredUrl(raw) ? raw : null;
+}
+
+const MAX_GEOMETRY_POINTS = 5_000;
+const MAX_GEOMETRY_RINGS = 40;
+const MAX_RING_POINTS = 400;
+
+function normalizePosition(value: unknown): GeoPosition | null {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  const lon = Number(value[0]);
+  const lat = Number(value[1]);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  if (lon < -180 || lon > 180 || lat < -90 || lat > 90) return null;
+  return [lon, lat];
+}
+
+function normalizeRing(
+  value: unknown,
+  budget: { points: number },
+): GeoPosition[] | null {
+  if (!Array.isArray(value) || value.length < 4 || value.length > MAX_RING_POINTS) {
     return null;
   }
+  const ring: GeoPosition[] = [];
+  for (const entry of value) {
+    const position = normalizePosition(entry);
+    if (!position) return null;
+    ring.push(position);
+    budget.points += 1;
+    if (budget.points > MAX_GEOMETRY_POINTS) return null;
+  }
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) return null;
+  return ring;
+}
+
+/** Bounded GeoJSON geometry: Polygon/MultiPolygon only, finite coordinates,
+ *  closed rings, max 5,000 points total. Other shapes are not stored. */
+export function normalizeGeometry(value: unknown): SceneGeometry | null {
+  const geometry = asRecord(value);
+  if (!geometry || !Array.isArray(geometry.coordinates)) return null;
+  const budget = { points: 0 };
+
+  if (geometry.type === "Polygon") {
+    if (geometry.coordinates.length > MAX_GEOMETRY_RINGS) return null;
+    const rings: GeoPosition[][] = [];
+    for (const entry of geometry.coordinates) {
+      const ring = normalizeRing(entry, budget);
+      if (!ring) return null;
+      rings.push(ring);
+    }
+    return rings.length > 0 ? { type: "Polygon", coordinates: rings } : null;
+  }
+
+  if (geometry.type === "MultiPolygon") {
+    if (geometry.coordinates.length > MAX_GEOMETRY_RINGS) return null;
+    const polygons: GeoPosition[][][] = [];
+    for (const polygon of geometry.coordinates) {
+      if (!Array.isArray(polygon) || polygon.length > MAX_GEOMETRY_RINGS) {
+        return null;
+      }
+      const rings: GeoPosition[][] = [];
+      for (const entry of polygon) {
+        const ring = normalizeRing(entry, budget);
+        if (!ring) return null;
+        rings.push(ring);
+      }
+      if (rings.length === 0) return null;
+      polygons.push(rings);
+    }
+    return polygons.length > 0
+      ? { type: "MultiPolygon", coordinates: polygons }
+      : null;
+  }
+
+  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -364,6 +493,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function readLinks(raw: Record<string, unknown>): Record<string, unknown>[] {
   if (!Array.isArray(raw.links)) return [];
   return raw.links
+    .slice(0, 40)
     .map((link) => asRecord(link))
     .filter((link): link is Record<string, unknown> => link !== null);
 }
@@ -385,28 +515,31 @@ export function normalizeStacItem(
   if (!item) return null;
   const itemId = readString(item.id);
   const properties = asRecord(item.properties);
-  if (!itemId || !properties) return null;
+  if (!itemId || itemId.length > 400 || !properties) return null;
 
   const acquiredAt = toUtcIso(properties.datetime);
   if (!acquiredAt) return null;
 
   const assetsRaw = asRecord(item.assets) ?? {};
   const assets: CatalogueAsset[] = [];
-  for (const [key, value] of Object.entries(assetsRaw)) {
+  for (const [key, value] of Object.entries(assetsRaw).slice(0, 80)) {
     const asset = asRecord(value);
     if (!asset) continue;
-    const href = readString(asset.href);
+    const href = readStoredUrl(asset.href);
     if (!href) continue;
     const roles = Array.isArray(asset.roles)
-      ? asset.roles.filter((role): role is string => typeof role === "string")
+      ? asset.roles
+          .filter((role): role is string => typeof role === "string")
+          .slice(0, 10)
+          .map((role) => role.slice(0, 60))
       : [];
     const authRefs = Array.isArray(asset["auth:refs"])
-      ? asset["auth:refs"]
+      ? asset["auth:refs"].slice(0, 10)
       : [];
     assets.push({
-      key,
-      title: readString(asset.title) ?? key,
-      type: readString(asset.type),
+      key: key.slice(0, 80),
+      title: (readString(asset.title) ?? key).slice(0, 120),
+      type: readString(asset.type)?.slice(0, 80) ?? null,
       href,
       roles,
       requiresAuth: authRefs.length > 0,
@@ -430,11 +563,14 @@ export function normalizeStacItem(
   const statisticsRaw = asRecord(properties.statistics);
   const statistics: SceneStatistic[] = statisticsRaw
     ? Object.entries(statisticsRaw)
-        .map(([label, value]) => ({ label, value: readNumber(value) }))
+        .slice(0, 14)
+        .map(([label, value]) => ({
+          label: label.slice(0, 60),
+          value: readNumber(value),
+        }))
         .filter(
           (entry): entry is SceneStatistic => entry.value !== null,
         )
-        .slice(0, 14)
     : [];
 
   const collection = SUPPORTED_COLLECTIONS.find(
@@ -457,10 +593,10 @@ export function normalizeStacItem(
     resolutionM: readNumber(properties.gsd),
     cloudCoverPct: readNumber(properties["eo:cloud_cover"]),
     bbox: readBbox(item.bbox),
-    geometry: item.geometry ?? null,
-    thumbnailUrl: readHttpUrl(thumbnailAsset?.href),
-    selfUrl: selfLink ? readHttpUrl(selfLink.href) : null,
-    licenseUrl: readHttpUrl(licenseLink?.href) ?? SENTINEL_LEGAL_NOTICE_URL,
+    geometry: normalizeGeometry(item.geometry),
+    thumbnailUrl: readStoredUrl(thumbnailAsset?.href),
+    selfUrl: selfLink ? readStoredUrl(selfLink.href) : null,
+    licenseUrl: readStoredUrl(licenseLink?.href) ?? SENTINEL_LEGAL_NOTICE_URL,
     attribution: `Contains modified Copernicus Sentinel data ${acquisitionYear}`,
     assets,
     statistics,

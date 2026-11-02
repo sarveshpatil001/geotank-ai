@@ -3,6 +3,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
 import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
+import {
+  isAllowedParentOrigin,
+  resolveParentOrigin,
+} from "./lib/iframe-security";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
@@ -75,7 +79,7 @@ class RootErrorBoundary extends React.Component<
             <p className="mt-2 text-xs text-muted-foreground break-words">
               {this.state.message}
             </p>
-            {this.state.stack && (
+            {import.meta.env.DEV && this.state.stack && (
               <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
                 {this.state.stack}
               </pre>
@@ -92,21 +96,44 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 
 
+let trustedParentOrigin: string | null = null;
+
+function parentTargetOrigin(): string | null {
+  if (trustedParentOrigin) return trustedParentOrigin;
+  return resolveParentOrigin({
+    framed: window.parent !== window,
+    appOrigin: window.location.origin,
+    referrer: document.referrer,
+    ancestorOrigin: window.location.ancestorOrigins?.[0] ?? null,
+  });
+}
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    if (window.parent === window) return;
+    const targetOrigin = parentTargetOrigin();
+    if (!targetOrigin) return;
     window.parent.postMessage(
       { type: "iframe-route-change", path: location.pathname },
-      "*",
+      targetOrigin,
     );
-    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [location.pathname]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "navigate") {
-        if (event.data.direction === "back") window.history.back();
-        if (event.data.direction === "forward") window.history.forward();
+      if (event.source !== window.parent) return;
+      if (!isAllowedParentOrigin(event.origin, window.location.origin)) return;
+      trustedParentOrigin = event.origin;
+
+      const data = event.data as
+        | { type?: unknown; direction?: unknown }
+        | null
+        | undefined;
+      if (data?.type === "navigate") {
+        if (data.direction === "back") window.history.back();
+        if (data.direction === "forward") window.history.forward();
       }
     }
     window.addEventListener("message", handleMessage);
@@ -116,13 +143,20 @@ function RouteSyncer() {
   return null;
 }
 
+const canRenderToolbar =
+  import.meta.env.DEV ||
+  (typeof window !== "undefined" &&
+    window.location.hostname.endsWith(".vly.sh"));
+
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
+      {canRenderToolbar && (
+        <ToolbarErrorBoundary>
+          <VlyToolbar />
+        </ToolbarErrorBoundary>
+      )}
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />

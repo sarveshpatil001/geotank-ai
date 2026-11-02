@@ -40,7 +40,23 @@ const schema = defineSchema(
 
     researchProjects: defineTable(researchProjectFields)
       .index("by_user", ["userId"])
-      .index("by_user_created", ["userId", "createdAt"]),
+      .index("by_user_created", ["userId", "createdAt"])
+      .index("by_upload_storage", ["uploadStorageId"]),
+
+    // Upload URLs are issued before a storage id exists. registerUpload records
+    // the id and the hourly cron removes rows (and their blobs) that were never
+    // finalised into a research record.
+    pendingUploads: defineTable({
+      userId: v.id("users"),
+      storageId: v.string(),
+      filename: v.string(),
+      contentType: v.string(),
+      sizeBytes: v.number(),
+      createdAt: v.number(),
+    })
+      .index("by_storage", ["storageId"])
+      .index("by_user", ["userId"])
+      .index("by_created", ["createdAt"]),
 
     calculations: defineTable(calculationFields)
       .index("by_user", ["userId"])
@@ -68,10 +84,29 @@ const schema = defineSchema(
         rawQuery: v.string(),
       }),
       fetchedAt: v.number(),
+    })
+      .index("by_key", ["key"])
+      .index("by_fetched_at", ["fetchedAt"]),
+
+    geocodeFailures: defineTable({
+      key: v.string(),
+      kind: v.string(),
+      message: v.string(),
+      at: v.number(),
+    })
+      .index("by_key", ["key"])
+      .index("by_at", ["at"]),
+
+    // Token buckets are keyed per user/action or per global service. Rows are
+    // small and reused in place; no raw query text or credentials are stored.
+    rateLimits: defineTable({
+      key: v.string(),
+      tokens: v.number(),
+      updatedAt: v.number(),
     }).index("by_key", ["key"]),
   },
   {
-    schemaValidation: false,
+    schemaValidation: true,
   },
 );
 
